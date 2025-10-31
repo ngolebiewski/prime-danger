@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Save on space, generate these huge lists of numbers on your own
+prime_lists/
