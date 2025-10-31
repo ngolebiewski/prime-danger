@@ -12,6 +12,7 @@ export class Player{
 
   addName(firstName){
     // eventually add in player name for high score!
+    // I like those old school letter wheels/pick your initials interactions
     this.name = firstName
   }
 }

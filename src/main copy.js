@@ -7,7 +7,7 @@ import {
   TILES_VERTICAL,
   TILES_HORIZONTAL,
 } from "./constants.js";
-import primes from "./primes_1K.js";
+import primes from "./primes_200.js";
 
 document.querySelector("#app").innerHTML = `
     <div id="game"></div>

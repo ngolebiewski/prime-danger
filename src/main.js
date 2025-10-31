@@ -89,6 +89,11 @@ function drawText(text, startX, startY, scale = 2, color = 0xffffff, container =
   return textSprites;
 }
 
+// Check if portrait mode (mobile)
+function isPortrait() {
+  return window.innerHeight > window.innerWidth;
+}
+
 // Game state
 const GAME_STATE = {
   TITLE: "title",
@@ -113,7 +118,6 @@ class Game {
     this.titleContainer = new PIXI.Container();
     this.shakeContainer = new PIXI.Container();
     
-    // Add containers in order
     app.stage.addChild(this.shakeContainer);
     this.shakeContainer.addChild(this.groundContainer);
     this.shakeContainer.addChild(this.runeContainer);
@@ -122,6 +126,18 @@ class Game {
 
     this.setupInput();
     this.showTitle();
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      if (this.state === GAME_STATE.TITLE) {
+        this.showTitle();
+      } else if (this.state === GAME_STATE.PLAYING) {
+        this.createRunes();
+        this.updateUI();
+      } else if (this.state === GAME_STATE.GAME_OVER) {
+        this.endGame();
+      }
+    });
   }
 
   setupInput() {
@@ -137,16 +153,28 @@ class Game {
         this.resetGame();
       }
     });
+
+    // Add click/tap listener for title and game over screens
+    app.canvas.addEventListener("click", (e) => {
+      if (this.state === GAME_STATE.TITLE) {
+        this.startGame();
+      } else if (this.state === GAME_STATE.GAME_OVER) {
+        this.resetGame();
+      }
+    });
   }
+
 
   showTitle() {
     this.titleContainer.removeChildren();
     const centerX = window.innerWidth / 2;
     const centerY = window.innerHeight / 2;
+    const scale = isPortrait() ? 1.5 : 3;
 
-    drawText("PRIME DANGER", centerX - 200, centerY - 100, 5, 0x00ff00, this.titleContainer);
-    drawText("PRESS ENTER TO START", centerX - 250, centerY + 50, 3, 0xffff00, this.titleContainer);
-    drawText("FIND THE PRIMES", centerX - 200, centerY + 120, 2, 0xffffff, this.titleContainer);
+    drawText("PRIME DANGER", centerX - (11 * TILE_SIZE * scale / 2), centerY - 100, scale, 0x00ff00, this.titleContainer);
+    drawText("PRESS ENTER", centerX - (12 * TILE_SIZE * scale /2), centerY + 50, 1, 0xffff00, this.titleContainer);
+    drawText("TO START", centerX - (12 * TILE_SIZE * scale /2), centerY + 90, 1, 0xffff00, this.titleContainer);
+    drawText("FIND THE PRIMES", centerX - (15 * TILE_SIZE* scale /2), centerY + 140, 1, 0xffffff, this.titleContainer);
   }
 
   startGame() {
@@ -187,11 +215,9 @@ class Game {
   generateNumbers() {
     this.currentNumbers = [];
     
-    // Get a random prime from the list
     const randomPrime = primes_200[Math.floor(Math.random() * primes_200.length)];
     this.primeIndex = Math.floor(Math.random() * 4);
     
-    // Generate 3 non-prime numbers
     const nonPrimes = [];
     while (nonPrimes.length < 3) {
       const num = Math.floor(Math.random() * 200) + 1;
@@ -200,7 +226,6 @@ class Game {
       }
     }
     
-    // Insert numbers with prime at the correct index
     for (let i = 0; i < 4; i++) {
       if (i === this.primeIndex) {
         this.currentNumbers.push(randomPrime);
@@ -211,32 +236,68 @@ class Game {
   }
 
   createRunes() {
-    const spacing = 250;
-    const startX = (window.innerWidth - (spacing * 3)) / 2;
-    const startY = window.innerHeight / 2 - 100;
-
+    this.runeContainer.removeChildren();
     this.runes = [];
     this.runeNumbers = [];
 
-    for (let i = 0; i < 4; i++) {
-      const rune = new PIXI.Sprite(runeBlack);
-      rune.x = startX + i * spacing;
-      rune.y = startY;
-      rune.scale.set(3); // Bigger runes!
-      rune.anchor.set(0.5);
-      rune.eventMode = 'static'; // Enable for touch
-      rune.cursor = "pointer";
-      rune.runeIndex = i;
+    const portrait = isPortrait();
+    const runeScale = portrait ? 2 : 2.5;
+    const textScale = portrait ? 2 : 2.5;
+    
+    if (portrait) {
+      // 2x2 grid for mobile
+      const spacingX = window.innerWidth / 2.5;
+      const spacingY = 200;
+      const startX = window.innerWidth / 2 - spacingX / 2;
+      const startY = window.innerHeight / 2 - spacingY / 2;
 
-      rune.on("pointerdown", () => this.selectRune(i));
+      for (let i = 0; i < 4; i++) {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        
+        const rune = new PIXI.Sprite(runeBlack);
+        rune.x = startX + col * spacingX;
+        rune.y = startY + row * spacingY;
+        rune.scale.set(runeScale);
+        rune.anchor.set(0.5);
+        rune.eventMode = 'static';
+        rune.cursor = "pointer";
+        rune.runeIndex = i;
 
-      this.runeContainer.addChild(rune);
-      this.runes.push(rune);
+        rune.on("pointerdown", () => this.selectRune(i));
 
-      // Draw number on rune (centered)
-      const numStr = this.currentNumbers[i].toString();
-      const numSprites = drawText(numStr, rune.x - (numStr.length * 24), rune.y - 15, 3, 0xffffff, this.runeContainer);
-      this.runeNumbers.push({ sprites: numSprites, index: i });
+        this.runeContainer.addChild(rune);
+        this.runes.push(rune);
+
+        const numStr = this.currentNumbers[i].toString();
+        const numSprites = drawText(numStr, rune.x - (numStr.length * TILE_SIZE * textScale / 2), rune.y - 12, textScale, 0xffffff, this.runeContainer);
+        this.runeNumbers.push({ sprites: numSprites, index: i });
+      }
+    } else {
+      // Horizontal for desktop
+      const spacing = Math.min(200, window.innerWidth / 5);
+      const startX = (window.innerWidth - (spacing * 3)) / 2;
+      const startY = window.innerHeight / 2 - 50;
+
+      for (let i = 0; i < 4; i++) {
+        const rune = new PIXI.Sprite(runeBlack);
+        rune.x = startX + i * spacing;
+        rune.y = startY;
+        rune.scale.set(runeScale);
+        rune.anchor.set(0.5);
+        rune.eventMode = 'static';
+        rune.cursor = "pointer";
+        rune.runeIndex = i;
+
+        rune.on("pointerdown", () => this.selectRune(i));
+
+        this.runeContainer.addChild(rune);
+        this.runes.push(rune);
+
+        const numStr = this.currentNumbers[i].toString();
+        const numSprites = drawText(numStr, rune.x - (numStr.length * TILE_SIZE * textScale / 2), rune.y - 12, textScale, 0xffffff, this.runeContainer);
+        this.runeNumbers.push({ sprites: numSprites, index: i });
+      }
     }
   }
 
@@ -249,35 +310,28 @@ class Game {
       this.player.updateScore(10);
       this.player.foundPrimes[this.currentNumbers[index]] = true;
       
-      // Change prime number to green
       this.runeNumbers[this.primeIndex].sprites.forEach(s => s.tint = 0x00ff00);
-      
-      // Change to blue rune
       this.runes[index].texture = runeBlue;
     } else {
       this.player.missedPrimes[this.currentNumbers[this.primeIndex]] = true;
       
-      // Show correct answer in yellow
       this.runeNumbers[this.primeIndex].sprites.forEach(s => s.tint = 0xffff00);
       this.runes[this.primeIndex].texture = runeBlue;
       
-      // Show wrong answer in red
       this.runeNumbers[index].sprites.forEach(s => s.tint = 0xff0000);
       this.runes[index].texture = runeGrey;
       
-      // Show factors of the wrong number in blue
       const factors = getFactors(this.currentNumbers[index]);
       if (factors.length > 0) {
         const factorText = factors.join(" X ");
         const rune = this.runes[index];
-        drawText(factorText, rune.x - (factorText.length * 8), rune.y + 60, 2, 0x00aaff, this.runeContainer);
+        const factorScale = isPortrait() ? 1 : 2;
+        drawText(factorText, rune.x - (factorText.length * TILE_SIZE * factorScale / 2.5), rune.y + 50, factorScale, 0x00aaff, this.runeContainer);
       }
       
-      // SHAKE THE SCREEN!
       this.shakeScreen();
     }
 
-    // Animate runes falling
     this.animateRunesFall();
   }
 
@@ -306,29 +360,28 @@ class Game {
   animateRunesFall() {
     const duration = 800;
     const startTime = Date.now();
-    const groundY = window.innerHeight - 100;
+    const groundY = window.innerHeight - 80;
     const initialPositions = this.runes.map(r => ({ x: r.x, y: r.y }));
+    const textScale = isPortrait() ? 2 : 2.5;
 
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      const easeProgress = progress * progress; // Ease in
+      const easeProgress = progress * progress;
 
       this.runes.forEach((rune, i) => {
         rune.y = initialPositions[i].y + (groundY - initialPositions[i].y) * easeProgress;
         
-        // Update number positions
         const numStr = this.currentNumbers[i].toString();
         this.runeNumbers[i].sprites.forEach((sprite, j) => {
-          sprite.x = rune.x - (numStr.length * 24) + (j * 48);
-          sprite.y = rune.y - 15;
+          sprite.x = rune.x - (numStr.length * TILE_SIZE * textScale / 2) + (j * TILE_SIZE * textScale);
+          sprite.y = rune.y - 12;
         });
       });
 
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
-        // Move runes to ground container
         this.runes.forEach((rune, i) => {
           this.groundContainer.addChild(rune);
           this.runeNumbers[i].sprites.forEach(s => this.groundContainer.addChild(s));
@@ -344,9 +397,15 @@ class Game {
   updateUI() {
     this.uiContainer.removeChildren();
     
-    drawText(`ROUND ${this.round} OF ${this.maxRounds}`, 20, 20, 2, 0xffffff, this.uiContainer);
-    drawText(`SCORE ${this.player.score}`, 20, 60, 2, 0x00ff00, this.uiContainer);
-    drawText("PRESS 1 2 3 4 OR TAP TO SELECT", 20, window.innerHeight - 60, 2, 0xffff00, this.uiContainer);
+    const uiScale = isPortrait() ? 1.5 : 2;
+    drawText(`ROUND ${this.round}/${this.maxRounds}`, 10, 10, uiScale, 0xffffff, this.uiContainer);
+    drawText(`SCORE ${this.player.score}`, 10, 40, uiScale, 0x00ff00, this.uiContainer);
+    
+    if (isPortrait()) {
+      drawText("TAP TO SELECT", 10, window.innerHeight - 30, 1.5, 0xffff00, this.uiContainer);
+    } else {
+      drawText("PRESS 1 2 3 4 OR TAP", 10, window.innerHeight - 40, 1.5, 0xffff00, this.uiContainer);
+    }
   }
 
   endGame() {
@@ -355,52 +414,61 @@ class Game {
     this.uiContainer.removeChildren();
 
     const centerX = window.innerWidth / 2;
+    const titleScale = isPortrait() ? 3 : 5;
     let yPos = 50;
 
-    drawText("GAME OVER", centerX - 150, yPos, 5, 0xff0000, this.uiContainer);
-    yPos += 100;
+    drawText("GAME OVER", centerX - (9 * TILE_SIZE * titleScale / 2), yPos, titleScale, 0xff0000, this.uiContainer);
+    yPos += titleScale * 30;
     
-    drawText(`FINAL SCORE ${this.player.score}`, centerX - 200, yPos, 3, 0x00ff00, this.uiContainer);
-    yPos += 80;
+    drawText(`SCORE ${this.player.score}`, centerX - (12 * TILE_SIZE), yPos, 2, 0x00ff00, this.uiContainer);
+    yPos += 60;
 
-    // Show found primes
     const foundList = Object.keys(this.player.foundPrimes).join(" ");
     if (foundList) {
-      drawText("FOUND", centerX - 100, yPos, 2, 0x00ff00, this.uiContainer);
-      yPos += 40;
-      const lines = this.wrapText(foundList, 15);
+      drawText("FOUND", centerX - (5 * TILE_SIZE * 1.5), yPos, 1.5, 0x00ff00, this.uiContainer);
+      yPos += 35;
+      const maxChars = isPortrait() ? 20 : 40;
+      const lines = this.wrapTextByChars(foundList, maxChars);
       lines.forEach(line => {
-        drawText(line, centerX - 200, yPos, 2, 0xffffff, this.uiContainer);
-        yPos += 35;
+        drawText(line, centerX - (line.length * TILE_SIZE / 2), yPos, 1.5, 0xffffff, this.uiContainer);
+        yPos += 28;
       });
-      yPos += 20;
+      yPos += 15;
     }
 
-    // Show missed primes
     const missedList = Object.keys(this.player.missedPrimes).join(" ");
     if (missedList) {
-      drawText("MISSED", centerX - 120, yPos, 2, 0xff0000, this.uiContainer);
-      yPos += 40;
-      const lines = this.wrapText(missedList, 15);
+      drawText("MISSED", centerX - (6 * TILE_SIZE * 1.5), yPos, 1.5, 0xff0000, this.uiContainer);
+      yPos += 35;
+      const maxChars = isPortrait() ? 20 : 40;
+      const lines = this.wrapTextByChars(missedList, maxChars);
       lines.forEach(line => {
-        drawText(line, centerX - 200, yPos, 2, 0xffaa00, this.uiContainer);
-        yPos += 35;
+        drawText(line, centerX - (line.length * TILE_SIZE / 2), yPos, 1.5, 0xffaa00, this.uiContainer);
+        yPos += 28;
       });
-      yPos += 20;
+      yPos += 15;
     }
 
-    drawText("PRESS ENTER TO PLAY AGAIN", centerX - 300, window.innerHeight - 100, 2, 0xffff00, this.uiContainer);
+    drawText("PRESS ENTER", centerX - (11 * TILE_SIZE), window.innerHeight - 60, 1.5, 0xffff00, this.uiContainer);
+    drawText("TO PLAY AGAIN", centerX - (13 * TILE_SIZE), window.innerHeight - 30, 1.5, 0xffff00, this.uiContainer);
   }
 
-  wrapText(text, maxWords) {
-    const words = text.split(" ");
+  wrapTextByChars(text, maxChars) {
     const lines = [];
-    for (let i = 0; i < words.length; i += maxWords) {
-      lines.push(words.slice(i, i + maxWords).join(" "));
-    }
+    let currentLine = "";
+    
+    text.split(" ").forEach(word => {
+      if ((currentLine + word).length > maxChars) {
+        if (currentLine) lines.push(currentLine.trim());
+        currentLine = word + " ";
+      } else {
+        currentLine += word + " ";
+      }
+    });
+    
+    if (currentLine) lines.push(currentLine.trim());
     return lines;
   }
 }
 
-// Start the game
 const game = new Game();

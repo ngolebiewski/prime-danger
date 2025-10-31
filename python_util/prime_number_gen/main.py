@@ -1,7 +1,7 @@
 import time
 import collections # Used for defaultdict in factor_num
 
-# --- Configuration CHANGE THESE!!!---
+# --- Configuration / CHANGE THESE!!!---
 MAX_LIMIT = 10000000
 PYTHON_OUTPUT_FILE = "primes_list_10M.py" # Output file for Python list
 JS_OUTPUT_FILE = "primes_10M.js" # New output file for JavaScript array
