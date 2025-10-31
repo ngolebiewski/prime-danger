@@ -59,7 +59,8 @@ export const FONT_MAP = {
   "#": 1014,
   "+": 1016,
   "-": 1017,
-  "/": 1019,
+  "/": 375, // sub in a sword for a '/' LOL
+  "dividedBy": 1019,
   "%": 880,
   "=": 1020,
   ":": 878,

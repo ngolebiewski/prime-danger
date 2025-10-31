@@ -1,5 +1,6 @@
 import "./style.css";
 import * as PIXI from "pixi.js";
+import Matter from "matter-js";
 import { DebugTilemap } from "./debugTilemap.js";
 import {
   FONT_MAP,
@@ -24,6 +25,25 @@ await app.init({
 });
 
 document.querySelector("#game").appendChild(app.canvas);
+
+// Matter.js setup
+const Engine = Matter.Engine;
+const World = Matter.World;
+const Bodies = Matter.Bodies;
+const Body = Matter.Body;
+
+const engine = Engine.create();
+engine.gravity.y = 2;
+
+// Create ground
+const ground = Bodies.rectangle(
+  window.innerWidth / 2,
+  window.innerHeight + 50,
+  window.innerWidth * 2,
+  100,
+  { isStatic: true }
+);
+World.add(engine.world, ground);
 
 // Load assets
 PIXI.Assets.add({ alias: "tilemap", src: "./art/monochrome-transparent_packed.png" });
@@ -89,12 +109,10 @@ function drawText(text, startX, startY, scale = 2, color = 0xffffff, container =
   return textSprites;
 }
 
-// Check if portrait mode (mobile)
 function isPortrait() {
   return window.innerHeight > window.innerWidth;
 }
 
-// Game state
 const GAME_STATE = {
   TITLE: "title",
   PLAYING: "playing",
@@ -107,11 +125,13 @@ class Game {
     this.state = GAME_STATE.TITLE;
     this.player = new Player();
     this.round = 0;
-    this.maxRounds = 10;
+    this.maxRounds = 7;
     this.currentNumbers = [];
     this.primeIndex = -1;
     this.runes = [];
     this.runeNumbers = [];
+    this.physicsObjects = [];
+    this.fallenRunes = []; // Track runes that have fallen
     this.runeContainer = new PIXI.Container();
     this.groundContainer = new PIXI.Container();
     this.uiContainer = new PIXI.Container();
@@ -127,7 +147,12 @@ class Game {
     this.setupInput();
     this.showTitle();
     
-    // Handle window resize
+    // Start physics update loop
+    app.ticker.add(() => {
+      Engine.update(engine, 1000 / 60);
+      this.updatePhysics();
+    });
+    
     window.addEventListener('resize', () => {
       if (this.state === GAME_STATE.TITLE) {
         this.showTitle();
@@ -136,6 +161,27 @@ class Game {
         this.updateUI();
       } else if (this.state === GAME_STATE.GAME_OVER) {
         this.endGame();
+      }
+    });
+  }
+
+  updatePhysics() {
+    this.physicsObjects.forEach(obj => {
+      if (obj.sprite && obj.body) {
+        obj.sprite.x = obj.body.position.x;
+        obj.sprite.y = obj.body.position.y;
+        obj.sprite.rotation = obj.body.angle;
+        
+        // Stop moving rubble after a short time
+        if (obj.created && Date.now() - obj.created > 3000) {
+          Body.setStatic(obj.body, true);
+        }
+        
+        // Also stop if velocity is very low
+        const vel = obj.body.velocity;
+        if (Math.abs(vel.x) < 0.1 && Math.abs(vel.y) < 0.1 && Math.abs(obj.body.angularVelocity) < 0.01) {
+          Body.setStatic(obj.body, true);
+        }
       }
     });
   }
@@ -154,7 +200,6 @@ class Game {
       }
     });
 
-    // Add click/tap listener for title and game over screens
     app.canvas.addEventListener("click", (e) => {
       if (this.state === GAME_STATE.TITLE) {
         this.startGame();
@@ -164,17 +209,29 @@ class Game {
     });
   }
 
-
   showTitle() {
     this.titleContainer.removeChildren();
     const centerX = window.innerWidth / 2;
     const centerY = window.innerHeight / 2;
     const scale = isPortrait() ? 1.5 : 3;
 
-    drawText("PRIME DANGER", centerX - (11 * TILE_SIZE * scale / 2), centerY - 100, scale, 0x00ff00, this.titleContainer);
-    drawText("PRESS ENTER", centerX - (12 * TILE_SIZE * scale /2), centerY + 50, 1, 0xffff00, this.titleContainer);
-    drawText("TO START", centerX - (12 * TILE_SIZE * scale /2), centerY + 90, 1, 0xffff00, this.titleContainer);
-    drawText("FIND THE PRIMES", centerX - (15 * TILE_SIZE* scale /2), centerY + 140, 1, 0xffffff, this.titleContainer);
+    // Calculate text widths for proper centering
+    const titleText = "PRIME DANGER";
+    const titleWidth = titleText.length * TILE_SIZE * scale;
+    
+    const enterText = "PRESS ENTER";
+    const enterWidth = enterText.length * TILE_SIZE * 1;
+    
+    const startText = "TO START";
+    const startWidth = startText.length * TILE_SIZE * 1;
+    
+    const findText = "FIND THE PRIMES";
+    const findWidth = findText.length * TILE_SIZE * 1;
+
+    drawText("PRIME DANGER", centerX - titleWidth / 2, centerY - 100, scale, 0x00ff00, this.titleContainer);
+    drawText("PRESS ENTER", centerX - enterWidth / 2, centerY + 50, 1, 0xffff00, this.titleContainer);
+    drawText("TO START", centerX - startWidth / 2, centerY + 90, 1, 0xffff00, this.titleContainer);
+    drawText("FIND THE PRIMES", centerX - findWidth / 2, centerY + 140, 1, 0xffffff, this.titleContainer);
   }
 
   startGame() {
@@ -185,6 +242,14 @@ class Game {
     this.player.missedPrimes = {};
     this.titleContainer.removeChildren();
     this.groundContainer.removeChildren();
+    
+    // Clear physics objects
+    this.physicsObjects.forEach(obj => {
+      if (obj.body) World.remove(engine.world, obj.body);
+    });
+    this.physicsObjects = [];
+    this.fallenRunes = [];
+    
     this.nextRound();
   }
 
@@ -195,6 +260,14 @@ class Game {
     this.groundContainer.removeChildren();
     this.runes = [];
     this.runeNumbers = [];
+    
+    // Clear physics objects
+    this.physicsObjects.forEach(obj => {
+      if (obj.body) World.remove(engine.world, obj.body);
+    });
+    this.physicsObjects = [];
+    this.fallenRunes = [];
+    
     this.showTitle();
   }
 
@@ -245,7 +318,6 @@ class Game {
     const textScale = portrait ? 2 : 2.5;
     
     if (portrait) {
-      // 2x2 grid for mobile
       const spacingX = window.innerWidth / 2.5;
       const spacingY = 200;
       const startX = window.innerWidth / 2 - spacingX / 2;
@@ -265,6 +337,7 @@ class Game {
         rune.runeIndex = i;
 
         rune.on("pointerdown", () => this.selectRune(i));
+        rune.on("click", () => this.selectRune(i));
 
         this.runeContainer.addChild(rune);
         this.runes.push(rune);
@@ -274,7 +347,6 @@ class Game {
         this.runeNumbers.push({ sprites: numSprites, index: i });
       }
     } else {
-      // Horizontal for desktop
       const spacing = Math.min(200, window.innerWidth / 5);
       const startX = (window.innerWidth - (spacing * 3)) / 2;
       const startY = window.innerHeight / 2 - 50;
@@ -290,6 +362,7 @@ class Game {
         rune.runeIndex = i;
 
         rune.on("pointerdown", () => this.selectRune(i));
+        rune.on("click", () => this.selectRune(i));
 
         this.runeContainer.addChild(rune);
         this.runes.push(rune);
@@ -315,7 +388,7 @@ class Game {
     } else {
       this.player.missedPrimes[this.currentNumbers[this.primeIndex]] = true;
       
-      this.runeNumbers[this.primeIndex].sprites.forEach(s => s.tint = 0xffff00);
+      this.runeNumbers[this.primeIndex].sprites.forEach(s => s.tint = 0x0000ff); //blue
       this.runes[this.primeIndex].texture = runeBlue;
       
       this.runeNumbers[index].sprites.forEach(s => s.tint = 0xff0000);
@@ -332,7 +405,168 @@ class Game {
       this.shakeScreen();
     }
 
+    // Disable interactivity on all runes
+    this.runes.forEach(r => {
+      r.eventMode = 'none';
+      r.cursor = 'default';
+    });
+
     this.animateRunesFall();
+  }
+
+  crumbleRune(rune, runeTexture, runeNumber, numberSprites, compaction = 0) {
+    const baseWidth = runeTexture.width;
+    const baseHeight = runeTexture.height;
+    
+    // Vary piece sizes based on compaction - more compacted = smaller pieces
+    const pieceSizes = compaction > 2 ? [1, 1, 2, 4] : compaction > 1 ? [2, 4, 4, 6] : [4, 4, 6, 6];
+    
+    let currentY = 0;
+    
+    while (currentY < baseHeight) {
+      let currentX = 0;
+      
+      while (currentX < baseWidth) {
+        // Random piece size
+        const PIECE_SIZE = pieceSizes[Math.floor(Math.random() * pieceSizes.length)];
+        
+        // Make sure we don't go out of bounds
+        const actualWidth = Math.min(PIECE_SIZE, baseWidth - currentX);
+        const actualHeight = Math.min(PIECE_SIZE, baseHeight - currentY);
+        
+        // Random chance to skip some pieces for irregular look
+        if (Math.random() < 0.3) {
+          currentX += actualWidth;
+          continue;
+        }
+        
+        const pieceTexture = new PIXI.Texture({
+          source: runeTexture.source,
+          frame: new PIXI.Rectangle(
+            currentX,
+            currentY,
+            actualWidth,
+            actualHeight
+          )
+        });
+
+        const piece = new PIXI.Sprite(pieceTexture);
+        piece.anchor.set(0.5);
+        piece.scale.set(rune.scale.x);
+        
+        const scaledWidth = actualWidth * rune.scale.x;
+        const scaledHeight = actualHeight * rune.scale.x;
+        const worldX = rune.x - (baseWidth * rune.scale.x / 2) + currentX * rune.scale.x + scaledWidth / 2;
+        const worldY = rune.y - (baseHeight * rune.scale.x / 2) + currentY * rune.scale.x + scaledHeight / 2;
+        
+        piece.x = worldX;
+        piece.y = worldY;
+        piece.eventMode = 'static';
+        piece.cursor = 'pointer';
+        
+        this.groundContainer.addChild(piece);
+
+        const body = Bodies.rectangle(
+          worldX,
+          worldY,
+          scaledWidth,
+          scaledHeight,
+          {
+            friction: 0.3,
+            restitution: .4,
+            density: 0.008 / (compaction + 1) // Lighter pieces when more compacted
+          }
+        );
+        
+        // More compaction = more violent explosion but pieces settle faster
+        const velocityMult = 8 + compaction * 3;
+        Body.setVelocity(body, {
+          x: (Math.random() - 0.5) * velocityMult,
+          y: -5 - Math.random() * velocityMult
+        });
+        Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.4);
+
+        World.add(engine.world, body);
+        
+        const physicsObj = { sprite: piece, body: body, created: Date.now() };
+        this.physicsObjects.push(physicsObj);
+        
+        // Add drag interaction
+        // piece.on('pointerdown', (event) => {
+        //   piece.isDragging = true;
+        //   piece.dragData = event.data;
+        //   Body.setStatic(body, false);
+        // });
+        
+        // piece.on('pointerup', () => {
+        //   piece.isDragging = false;
+        // });
+        
+        // piece.on('pointerupoutside', () => {
+        //   piece.isDragging = false;
+        // });
+        
+        // piece.on('pointermove', (event) => {
+        //   if (piece.isDragging) {
+        //     const newPos = piece.dragData.getLocalPosition(piece.parent);
+        //     Body.setPosition(body, { x: newPos.x, y: newPos.y });
+        //     Body.setVelocity(body, { x: 0, y: 0 });
+        //   }
+        // });
+        
+        currentX += actualWidth;
+      }
+      
+      currentY += Math.min(pieceSizes[Math.floor(Math.random() * pieceSizes.length)], baseHeight - currentY);
+    }
+    
+    // Also crumble the number sprites with varying sizes
+    if (numberSprites) {
+      numberSprites.forEach(sprite => {
+        // Break each number character into smaller pieces
+        const charWidth = sprite.width;
+        const charHeight = sprite.height;
+        const numPieces = compaction > 1 ? 4 : 2; // More pieces when compacted
+        const pieceSize = charWidth / numPieces;
+        
+        for (let i = 0; i < numPieces; i++) {
+          for (let j = 0; j < numPieces; j++) {
+            if (Math.random() < 0.2) continue; // Skip some for irregular look
+            
+            const miniPiece = new PIXI.Sprite(sprite.texture);
+            miniPiece.x = sprite.x + i * pieceSize;
+            miniPiece.y = sprite.y + j * pieceSize;
+            miniPiece.width = pieceSize;
+            miniPiece.height = pieceSize;
+            miniPiece.tint = sprite.tint;
+            
+            this.groundContainer.addChild(miniPiece);
+            
+            const body = Bodies.rectangle(
+              miniPiece.x,
+              miniPiece.y,
+              pieceSize,
+              pieceSize,
+              {
+                friction: 0.5,
+                restitution: 0.1,
+                density: 0.001
+              }
+            );
+            
+            Body.setVelocity(body, {
+              x: (Math.random() - 0.5) * (6 + compaction * 2),
+              y: -4 - Math.random() * (4 + compaction * 2)
+            });
+            
+            World.add(engine.world, body);
+            this.physicsObjects.push({ sprite: miniPiece, body: body, created: Date.now() });
+          }
+        }
+        
+        sprite.destroy();
+      });
+    }
   }
 
   shakeScreen() {
@@ -358,9 +592,9 @@ class Game {
   }
 
   animateRunesFall() {
-    const duration = 800;
+    const duration = 1000;
     const startTime = Date.now();
-    const groundY = window.innerHeight - 80;
+    const groundY = window.innerHeight - 150;
     const initialPositions = this.runes.map(r => ({ x: r.x, y: r.y }));
     const textScale = isPortrait() ? 2 : 2.5;
 
@@ -382,12 +616,38 @@ class Game {
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
-        this.runes.forEach((rune, i) => {
-          this.groundContainer.addChild(rune);
-          this.runeNumbers[i].sprites.forEach(s => this.groundContainer.addChild(s));
+        // Crumble ALL fallen runes when new ones land
+        const numFallen = this.fallenRunes.length;
+        this.fallenRunes.forEach((fallen, index) => {
+          // Calculate compaction level - older runes (at bottom) are more compacted
+          const compaction = numFallen - index - 1;
+          this.crumbleRune(fallen.rune, fallen.texture, fallen.number, fallen.numberSprites, compaction);
+          fallen.rune.destroy();
         });
         
-        setTimeout(() => this.nextRound(), 1000);
+        // Clear fallen runes array
+        this.fallenRunes = [];
+        
+        // Move current runes to ground container and save them as fallen runes
+        this.runes.forEach((rune, i) => {
+          this.groundContainer.addChild(rune);
+          this.runeNumbers[i].sprites.forEach(s => {
+            this.groundContainer.addChild(s);
+          });
+          
+          // Store this rune as a fallen rune
+          this.fallenRunes.push({
+            rune: rune,
+            texture: rune.texture,
+            number: this.currentNumbers[i],
+            numberSprites: this.runeNumbers[i].sprites
+          });
+        });
+        
+        // Clear the rune container
+        this.runeContainer.removeChildren();
+        
+        setTimeout(() => this.nextRound(), 1500);
       }
     };
 
