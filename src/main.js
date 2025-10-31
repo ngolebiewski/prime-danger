@@ -11,6 +11,9 @@ import {
 import primes_200 from "./primes_200.js";
 import { Player } from "./player.js";
 
+console.log('🚀 Main.js loaded');
+
+async function initGame() {
 document.querySelector("#app").innerHTML = `<div id="game"></div>`;
 
 const app = new PIXI.Application();
@@ -22,9 +25,14 @@ await app.init({
   resizeTo: window,
   antialias: false,
   roundPixels: true,
+  preference: 'high-performance',
 });
 
-document.querySelector("#game").appendChild(app.canvas);
+
+console.log('✨ PIXI App Initialized');
+document.querySelector("#game").style.backgroundColor = "red"; // Temporarily turn the background red
+document.querySelector("#game").appendChild(app.canvas); 
+
 
 // Matter.js setup
 const Engine = Matter.Engine;
@@ -46,10 +54,10 @@ const ground = Bodies.rectangle(
 World.add(engine.world, ground);
 
 // Load assets
-PIXI.Assets.add({ alias: "tilemap", src: "./art/monochrome-transparent_packed.png" });
-PIXI.Assets.add({ alias: "runeBlack", src: "./art/runeBlack_slabOutline_035.png" });
-PIXI.Assets.add({ alias: "runeBlue", src: "./art/runeBlue_slabOutline_035.png" });
-PIXI.Assets.add({ alias: "runeGrey", src: "./art/runeGrey_slabOutline_036.png" });
+PIXI.Assets.add({ alias: "tilemap", src: "/art/monochrome-transparent_packed.png" });
+PIXI.Assets.add({ alias: "runeBlack", src: "/art/runeBlack_slabOutline_035.png" });
+PIXI.Assets.add({ alias: "runeBlue", src: "/art/runeBlue_slabOutline_035.png" });
+PIXI.Assets.add({ alias: "runeGrey", src: "/art/runeGrey_slabOutline_036.png" });
 
 const loadedAssets = await PIXI.Assets.load(["tilemap", "runeBlack", "runeBlue", "runeGrey"]);
 const texture = loadedAssets.tilemap;
@@ -732,3 +740,5 @@ class Game {
 }
 
 const game = new Game();
+}
+initGame()
