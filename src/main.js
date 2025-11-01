@@ -2,7 +2,8 @@ import "./style.css";
 import * as PIXI from "pixi.js";
 import Matter from "matter-js";
 import { DebugTilemap } from "./debugTilemap.js";
-import {
+import { snd_crash0 } from "./soundFx.js";
+import { 
   FONT_MAP,
   TILE_SIZE,
   TILES_VERTICAL,
@@ -10,6 +11,7 @@ import {
 } from "./constants.js";
 import primes_200 from "./primes_200.js";
 import { Player } from "./player.js";
+
 
 console.log('🚀 Main.js loaded');
 
@@ -197,6 +199,7 @@ class Game {
   setupInput() {
     window.addEventListener("keydown", (e) => {
       if (this.state === GAME_STATE.TITLE && (e.key === "Enter" || e.key === " ")) {
+        snd_crash0();
         this.startGame();
       } else if (this.state === GAME_STATE.PLAYING) {
         if (e.key === "1") this.selectRune(0);
@@ -204,6 +207,7 @@ class Game {
         if (e.key === "3") this.selectRune(2);
         if (e.key === "4") this.selectRune(3);
       } else if (this.state === GAME_STATE.GAME_OVER && (e.key === "Enter" || e.key === " ")) {
+        snd_crash0();;
         this.resetGame();
       }
     });

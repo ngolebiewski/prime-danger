@@ -19,6 +19,7 @@ https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes
 - Art: Open source tilesheets (Runes + 1-bit) from Kenney: https://kenney.nl/
 - Maths: Eratosthenes + Python
 - Environment: Vite (Vanilla JavaScipt) + Bun
+- Sounds (In Progress): ZZfx: https://killedbyapixel.github.io/ZzFX/ + TBD
 
 ### Run it
 - Clone from github
