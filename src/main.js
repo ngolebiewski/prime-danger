@@ -100,6 +100,7 @@ async function initGame() {
     return FONT_MAP[char.toUpperCase()] || null;
   }
 
+  //old factor function. gave something like 2x4x6x8x10 etc.
   function getFactors(num) {
     const factors = [];
     for (let i = 2; i <= Math.sqrt(num); i++) {
@@ -112,6 +113,20 @@ async function initGame() {
     }
     return factors.sort((a, b) => a - b);
   }
+
+    // 🩶 PATCH START — New clean factor pair logic
+  function getFactorPairs(n) {
+    const pairs = [];
+    const limit = Math.floor(Math.sqrt(n));
+    for (let i = 1; i <= limit; i++) {
+      if (n % i === 0) {
+        const j = n / i;
+        pairs.push(`${i}X${j}`);
+      }
+    }
+    return pairs;
+  }
+  // 🩶 PATCH END
 
   function drawText(
     text,
@@ -184,6 +199,8 @@ async function initGame() {
       this.uiContainer = new PIXI.Container();
       this.titleContainer = new PIXI.Container();
       this.shakeContainer = new PIXI.Container();
+
+      
 
       app.stage.addChild(this.shakeContainer);
       this.shakeContainer.addChild(this.groundContainer);
@@ -475,68 +492,69 @@ async function initGame() {
       }
     }
 
-  selectRune(index) {
-  // ⛔ Ignore if not in PLAYING state or already locked
-  if (this.state !== GAME_STATE.PLAYING || this.inputLocked) return;
+// 🩶 PATCH START — updated selectRune using new factor pair logic
+    selectRune(index) {
+      if (this.state !== GAME_STATE.PLAYING || this.inputLocked) return;
 
-  // 🔒 Prevent further inputs and remove key listener
-  this.inputLocked = true;
-  this.removeInput();
+      this.inputLocked = true;
+      this.removeInput();
 
-  const isCorrect = index === this.primeIndex;
+      const isCorrect = index === this.primeIndex;
 
-  if (isCorrect) {
-    this.player.updateScore(10);
-    this.player.foundPrimes[this.currentNumbers[index]] = true;
+      if (isCorrect) {
+        this.player.updateScore(10);
+        this.player.foundPrimes[this.currentNumbers[index]] = true;
 
-    this.runeNumbers[this.primeIndex].sprites.forEach(
-      (s) => (s.tint = 0x00ff00)
-    );
-    this.runes[index].texture = runeBlue;
-  } else {
-    this.player.missedPrimes[this.currentNumbers[this.primeIndex]] = true;
+        this.runeNumbers[this.primeIndex].sprites.forEach(
+          (s) => (s.tint = 0x00ff00)
+        );
+        this.runes[index].texture = runeBlue;
+      } else {
+        this.player.missedPrimes[this.currentNumbers[this.primeIndex]] = true;
 
-    this.runeNumbers[this.primeIndex].sprites.forEach(
-      (s) => (s.tint = 0x0000ff)
-    ); // blue
-    this.runes[this.primeIndex].texture = runeBlue;
+        this.runeNumbers[this.primeIndex].sprites.forEach(
+          (s) => (s.tint = 0x0000ff)
+        );
+        this.runes[this.primeIndex].texture = runeBlue;
 
-    this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
-    this.runes[index].texture = runeGrey;
+        this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
+        this.runes[index].texture = runeGrey;
 
-    const factors = getFactors(this.currentNumbers[index]);
-    if (factors.length > 0) {
-      const factorText = factors.join(" X ");
-      const rune = this.runes[index];
-      const factorScale = isPortrait() ? 1 : 2;
-      drawText(
-        factorText,
-        rune.x - (factorText.length * TILE_SIZE * factorScale) / 2.5,
-        rune.y + 50,
-        factorScale,
-        0x00aaff,
-        this.runeContainer
-      );
+        // 🧮 Display factor pairs vertically
+        const pairs = getFactorPairs(this.currentNumbers[index]);
+        if (pairs.length > 0) {
+          const rune = this.runes[index];
+          const factorScale = isPortrait() ? 1 : 2;
+
+          pairs.forEach((pair, i) => {
+            drawText(
+              pair,
+              rune.x - (pair.length * TILE_SIZE * factorScale) / 3,
+              rune.y + 40 + i * (TILE_SIZE * factorScale * 1.1),
+              factorScale,
+              0x00aaff,
+              this.runeContainer
+            );
+          });
+        }
+
+        this.shakeScreen();
+      }
+
+      this.runes.forEach((r) => {
+        r.eventMode = "none";
+        r.cursor = "default";
+      });
+
+      this.animateRunesFall();
+
+      setTimeout(() => {
+        this.inputLocked = false;
+        this.setupInput();
+      }, 2000);
     }
-
-    this.shakeScreen();
-  }
-
-  // Disable interactivity on all runes so clicks/taps don’t stack
-  this.runes.forEach((r) => {
-    r.eventMode = "none";
-    r.cursor = "default";
-  });
-
-  // 🌊 Trigger animation + delayed next round
-  this.animateRunesFall();
-
-  // 🕒 Restore input after animation finishes
-  setTimeout(() => {
-    this.inputLocked = false;
-    this.setupInput(); // re-enable key listener
-  }, 2000);
-}
+    // 🩶 PATCH END
+  
 
 
     crumbleRune(rune, runeTexture, runeNumber, numberSprites, compaction = 0) {
@@ -806,7 +824,7 @@ async function initGame() {
           // Clear the rune container
           this.runeContainer.removeChildren();
 
-          setTimeout(() => this.nextRound(), 1500);
+          setTimeout(() => this.nextRound(), 1000);
         }
       };
 
