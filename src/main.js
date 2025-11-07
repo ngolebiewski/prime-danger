@@ -2,7 +2,7 @@ import "./style.css";
 import * as PIXI from "pixi.js";
 import Matter from "matter-js";
 import { DebugTilemap } from "./debugTilemap.js";
-import { snd_crash0 } from "./soundFx.js";
+import { snd_crash0, snd_good_blip, snd_wrong_blip, snd_boom } from "./soundFx.js";
 import {
   FONT_MAP,
   TILE_SIZE,
@@ -504,6 +504,7 @@ async function initGame() {
       if (isCorrect) {
         this.player.updateScore(10);
         this.player.foundPrimes[this.currentNumbers[index]] = true;
+        snd_good_blip()
 
         this.runeNumbers[this.primeIndex].sprites.forEach(
           (s) => (s.tint = 0x00ff00)
@@ -519,6 +520,7 @@ async function initGame() {
 
         this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
         this.runes[index].texture = runeGrey;
+        snd_wrong_blip()
 
         // 🧮 Display factor pairs vertically
         const pairs = getFactorPairs(this.currentNumbers[index]);
@@ -788,6 +790,7 @@ async function initGame() {
           requestAnimationFrame(animate);
         } else {
           // Crumble ALL fallen runes when new ones land
+          snd_boom()
           const numFallen = this.fallenRunes.length;
           this.fallenRunes.forEach((fallen, index) => {
             // Calculate compaction level - older runes (at bottom) are more compacted
