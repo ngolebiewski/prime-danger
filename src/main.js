@@ -120,10 +120,12 @@ async function initGame() {
   }
 
   // 🩶 PATCH START — New clean factor pair logic
+  // Wait -- we DONT CARE ABOUT 1. so lets start with i = 2 rather than i = 1
+  // Also, you only need to check to the square root of the number you're factoring.
   function getFactorPairs(n) {
     const pairs = [];
     const limit = Math.floor(Math.sqrt(n));
-    for (let i = 1; i <= limit; i++) {
+    for (let i = 2; i <= limit; i++) {
       if (n % i === 0) {
         const j = n / i;
         pairs.push(`${i}X${j}`);
