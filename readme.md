@@ -14,11 +14,12 @@ https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes
   - timer, the rune stones should lower. As game progresses move faster just like Tetris...
 
 ### Tech + Credits
-- Rendering Engine: Pixi.js
+- Rendering Engine: Pixi.js https://pixijs.com/
 - Code: JavaScript
 - Art: Open source tilesheets (Runes + 1-bit) from Kenney: https://kenney.nl/
 - Maths: Eratosthenes + Python
 - Environment: Vite (Vanilla JavaScipt) + Bun
+- Physics: matter.js https://brm.io/matter-js/
 - Sounds (In Progress): ZZfx: https://killedbyapixel.github.io/ZzFX/ + TBD
 
 ### Run it
@@ -29,3 +30,7 @@ https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes
 
 ### Debug Options...
 - `T` Should show main spritesheet with index numbers.
+
+### Mobile Screenshot
+
+<img src="public/mobile_screenshot.jpg" alt="Game screenshot with numbers on stone slabs" width="400" />

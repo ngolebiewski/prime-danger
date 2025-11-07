@@ -2,7 +2,12 @@ import "./style.css";
 import * as PIXI from "pixi.js";
 import Matter from "matter-js";
 import { DebugTilemap } from "./debugTilemap.js";
-import { snd_crash0, snd_good_blip, snd_wrong_blip, snd_boom } from "./soundFx.js";
+import {
+  snd_crash0,
+  snd_good_blip,
+  snd_wrong_blip,
+  snd_boom,
+} from "./soundFx.js";
 import {
   FONT_MAP,
   TILE_SIZE,
@@ -114,7 +119,7 @@ async function initGame() {
     return factors.sort((a, b) => a - b);
   }
 
-    // 🩶 PATCH START — New clean factor pair logic
+  // 🩶 PATCH START — New clean factor pair logic
   function getFactorPairs(n) {
     const pairs = [];
     const limit = Math.floor(Math.sqrt(n));
@@ -200,8 +205,6 @@ async function initGame() {
       this.titleContainer = new PIXI.Container();
       this.shakeContainer = new PIXI.Container();
 
-      
-
       app.stage.addChild(this.shakeContainer);
       this.shakeContainer.addChild(this.groundContainer);
       this.shakeContainer.addChild(this.runeContainer);
@@ -255,26 +258,62 @@ async function initGame() {
     }
 
     setupInput() {
-      this.handleKeyDown = (e) => {
-        if (
-          this.state === GAME_STATE.TITLE &&
-          (e.key === "Enter" || e.key === " ")
-        ) {
+      // 🧠 Unified input handler
+      const handleStartOrSelect = (index = null) => {
+        if (this.state === GAME_STATE.TITLE) {
           snd_crash0();
           this.startGame();
-        } else if (this.state === GAME_STATE.PLAYING) {
-          if (["1", "2", "3", "4"].includes(e.key))
-            this.selectRune(parseInt(e.key) - 1);
-        } else if (
-          this.state === GAME_STATE.GAME_OVER &&
-          (e.key === "Enter" || e.key === " ")
-        ) {
+        } else if (this.state === GAME_STATE.PLAYING && index !== null) {
+          this.selectRune(index);
+        } else if (this.state === GAME_STATE.GAME_OVER) {
           snd_crash0();
           this.resetGame();
         }
       };
 
+      // Keyboard input
+      this.handleKeyDown = (e) => {
+        if (
+          this.state === GAME_STATE.TITLE &&
+          (e.key === "Enter" || e.key === " ")
+        ) {
+          handleStartOrSelect();
+        } else if (
+          this.state === GAME_STATE.PLAYING &&
+          ["1", "2", "3", "4"].includes(e.key)
+        ) {
+          handleStartOrSelect(parseInt(e.key) - 1);
+        } else if (
+          this.state === GAME_STATE.GAME_OVER &&
+          (e.key === "Enter" || e.key === " ")
+        ) {
+          handleStartOrSelect();
+        }
+      };
       window.addEventListener("keydown", this.handleKeyDown);
+
+      // Pointer input (tap/click) — covers touch & mouse
+      this.handlePointerDown = () => {
+        if (
+          this.state === GAME_STATE.TITLE ||
+          this.state === GAME_STATE.GAME_OVER
+        ) {
+          handleStartOrSelect();
+        }
+      };
+      app.view.addEventListener("pointerdown", this.handlePointerDown);
+    }
+
+    // Remove listeners when locking input
+    removeInput() {
+      if (this.handleKeyDown) {
+        window.removeEventListener("keydown", this.handleKeyDown);
+        this.handleKeyDown = null;
+      }
+      if (this.handlePointerDown) {
+        app.removeEventListener("pointerdown", this.handlePointerDown);
+        this.handlePointerDown = null;
+      }
     }
 
     removeInput() {
@@ -492,7 +531,7 @@ async function initGame() {
       }
     }
 
-// 🩶 PATCH START — updated selectRune using new factor pair logic
+    // 🩶 PATCH START — updated selectRune using new factor pair logic
     selectRune(index) {
       if (this.state !== GAME_STATE.PLAYING || this.inputLocked) return;
 
@@ -504,7 +543,7 @@ async function initGame() {
       if (isCorrect) {
         this.player.updateScore(10);
         this.player.foundPrimes[this.currentNumbers[index]] = true;
-        snd_good_blip()
+        snd_good_blip();
 
         this.runeNumbers[this.primeIndex].sprites.forEach(
           (s) => (s.tint = 0x00ff00)
@@ -520,7 +559,7 @@ async function initGame() {
 
         this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
         this.runes[index].texture = runeGrey;
-        snd_wrong_blip()
+        snd_wrong_blip();
 
         // 🧮 Display factor pairs vertically
         const pairs = getFactorPairs(this.currentNumbers[index]);
@@ -556,8 +595,6 @@ async function initGame() {
       }, 2000);
     }
     // 🩶 PATCH END
-  
-
 
     crumbleRune(rune, runeTexture, runeNumber, numberSprites, compaction = 0) {
       const baseWidth = runeTexture.width;
@@ -790,7 +827,7 @@ async function initGame() {
           requestAnimationFrame(animate);
         } else {
           // Crumble ALL fallen runes when new ones land
-          snd_boom()
+          snd_boom();
           const numFallen = this.fallenRunes.length;
           this.fallenRunes.forEach((fallen, index) => {
             // Calculate compaction level - older runes (at bottom) are more compacted
