@@ -47,8 +47,6 @@ async function initGame() {
     preference: "high-performance",
   });
 
-  console.log("✨ PIXI App Initialized");
-  document.querySelector("#game").style.backgroundColor = "red"; // Temporarily turn the background red
   document.querySelector("#game").appendChild(app.canvas);
 
   // Matter.js setup
