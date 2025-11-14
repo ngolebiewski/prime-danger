@@ -17,7 +17,20 @@ import {
 import primes_200 from "./primes_200.js";
 import { Player } from "./player.js";
 
+// AUDIO SOUNDTRACK
+// use it:
+// audio.start(); // fade sound in
+// audio.fadeOut(); // fade sound out
+import { AudioManager } from "./audioManager.js";
+const audio = new AudioManager();
+
 console.log("🚀 Main.js loaded");
+
+/* Vite needs Pixi Games to be wrapped in an async function. Known oddity.
+https://pixijs.com/8.x/guides/getting-started/quick-start
+warning
+If using Vite you still need to wrap your code in an async function. There is an issue when using top level await with PixiJS when building for production.
+This issue is known to affect Vite <=6.0.6. Future versions of Vite may resolve this issue. */
 
 async function initGame() {
   document.querySelector("#app").innerHTML = `<div id="game"></div>`;
@@ -192,6 +205,7 @@ async function initGame() {
       this.state = GAME_STATE.TITLE;
       this.inputLocked = false; // 🧠 prevent spam input
       this.handleKeyDown = null; // 🎹 store listener reference
+      this.soundOn = true; //sound off/on
       this.player = new Player();
       this.round = 0;
       this.maxRounds = 7;
@@ -263,12 +277,12 @@ async function initGame() {
       // 🧠 Unified input handler
       const handleStartOrSelect = (index = null) => {
         if (this.state === GAME_STATE.TITLE) {
-          snd_crash0();
+          if (this.soundOn) snd_crash0();
           this.startGame();
         } else if (this.state === GAME_STATE.PLAYING && index !== null) {
           this.selectRune(index);
         } else if (this.state === GAME_STATE.GAME_OVER) {
-          snd_crash0();
+          if (this.soundOn) snd_crash0();
           this.resetGame();
         }
       };
@@ -386,6 +400,9 @@ async function initGame() {
       this.player.missedPrimes = {};
       this.titleContainer.removeChildren();
       this.groundContainer.removeChildren();
+
+      // start music TEMPORARILY TURNED OFF!
+      // audio.start();
 
       // Clear physics objects
       this.physicsObjects.forEach((obj) => {
@@ -689,29 +706,6 @@ async function initGame() {
           const physicsObj = { sprite: piece, body: body, created: Date.now() };
           this.physicsObjects.push(physicsObj);
 
-          // Add drag interaction
-          // piece.on('pointerdown', (event) => {
-          //   piece.isDragging = true;
-          //   piece.dragData = event.data;
-          //   Body.setStatic(body, false);
-          // });
-
-          // piece.on('pointerup', () => {
-          //   piece.isDragging = false;
-          // });
-
-          // piece.on('pointerupoutside', () => {
-          //   piece.isDragging = false;
-          // });
-
-          // piece.on('pointermove', (event) => {
-          //   if (piece.isDragging) {
-          //     const newPos = piece.dragData.getLocalPosition(piece.parent);
-          //     Body.setPosition(body, { x: newPos.x, y: newPos.y });
-          //     Body.setVelocity(body, { x: 0, y: 0 });
-          //   }
-          // });
-
           currentX += actualWidth;
         }
 
@@ -920,13 +914,32 @@ async function initGame() {
       this.runeContainer.removeChildren();
       this.uiContainer.removeChildren();
 
+      // FADE OUT SOUND
+      audio.fadeOut();
+
       const centerX = window.innerWidth / 2;
       const titleScale = isPortrait() ? 3 : 5;
       let yPos = 50;
 
+      // -------------------------------
+      // END MESSAGE (GAME OVER / PERFECT / GOOD)
+      // -------------------------------
+      let endMessage = "GAME OVER";
+
+      switch (true) {
+        case this.player.score === 70:
+          endMessage = "PERFECT SCORE";
+          break;
+        case this.player.score >= 50:
+          endMessage = "GOOD SCORE";
+          break;
+      }
+
+      const endMsgWidth = endMessage.length * TILE_SIZE * titleScale;
+
       drawText(
-        "GAME OVER",
-        centerX - (9 * TILE_SIZE * titleScale) / 2,
+        endMessage,
+        centerX - endMsgWidth / 2,
         yPos,
         titleScale,
         0xff0000,
@@ -934,9 +947,15 @@ async function initGame() {
       );
       yPos += titleScale * 30;
 
+      // -------------------------------
+      // SCORE (Centered)
+      // -------------------------------
+      const scoreText = `SCORE ${this.player.score}`;
+      const scoreWidth = scoreText.length * TILE_SIZE * 2;
+
       drawText(
-        `SCORE ${this.player.score}`,
-        centerX - 12 * TILE_SIZE,
+        scoreText,
+        centerX - scoreWidth / 2,
         yPos,
         2,
         0x00ff00,
@@ -944,23 +963,33 @@ async function initGame() {
       );
       yPos += 60;
 
+      // -------------------------------
+      // FOUND PRIMES (Centered)
+      // -------------------------------
       const foundList = Object.keys(this.player.foundPrimes).join(" ");
       if (foundList) {
+        const foundHeader = "FOUND";
+        const foundHeaderWidth = foundHeader.length * TILE_SIZE * 1.5;
+
         drawText(
-          "FOUND",
-          centerX - 5 * TILE_SIZE * 1.5,
+          foundHeader,
+          centerX - foundHeaderWidth / 2,
           yPos,
           1.5,
           0x00ff00,
           this.uiContainer
         );
         yPos += 35;
+
         const maxChars = isPortrait() ? 20 : 40;
-        const lines = this.wrapTextByChars(foundList, maxChars);
-        lines.forEach((line) => {
+        const foundLines = this.wrapTextByChars(foundList, maxChars);
+
+        foundLines.forEach((line) => {
+          const lineWidth = line.length * TILE_SIZE * 1.5;
+
           drawText(
             line,
-            centerX - (line.length * TILE_SIZE) / 2,
+            centerX - lineWidth / 2,
             yPos,
             1.5,
             0xffffff,
@@ -968,26 +997,37 @@ async function initGame() {
           );
           yPos += 28;
         });
+
         yPos += 15;
       }
 
+      // -------------------------------
+      // MISSED PRIMES (Centered)
+      // -------------------------------
       const missedList = Object.keys(this.player.missedPrimes).join(" ");
       if (missedList) {
+        const missedHeader = "MISSED";
+        const missedHeaderWidth = missedHeader.length * TILE_SIZE * 1.5;
+
         drawText(
-          "MISSED",
-          centerX - 6 * TILE_SIZE * 1.5,
+          missedHeader,
+          centerX - missedHeaderWidth / 2,
           yPos,
           1.5,
           0xff0000,
           this.uiContainer
         );
         yPos += 35;
+
         const maxChars = isPortrait() ? 20 : 40;
-        const lines = this.wrapTextByChars(missedList, maxChars);
-        lines.forEach((line) => {
+        const missedLines = this.wrapTextByChars(missedList, maxChars);
+
+        missedLines.forEach((line) => {
+          const lineWidth = line.length * TILE_SIZE * 1.5;
+
           drawText(
             line,
-            centerX - (line.length * TILE_SIZE) / 2,
+            centerX - lineWidth / 2,
             yPos,
             1.5,
             0xffaa00,
@@ -995,20 +1035,31 @@ async function initGame() {
           );
           yPos += 28;
         });
+
         yPos += 15;
       }
 
+      // -------------------------------
+      // PRESS ENTER + TO PLAY AGAIN (Centered!)
+      // -------------------------------
+      const enter1 = "PRESS ENTER";
+      const enter1Width = enter1.length * TILE_SIZE * 1.5;
+
       drawText(
-        "PRESS ENTER",
-        centerX - 11 * TILE_SIZE,
+        enter1,
+        centerX - enter1Width / 2,
         window.innerHeight - 60,
         1.5,
         0xffff00,
         this.uiContainer
       );
+
+      const enter2 = "TO PLAY AGAIN";
+      const enter2Width = enter2.length * TILE_SIZE * 1.5;
+
       drawText(
-        "TO PLAY AGAIN",
-        centerX - 13 * TILE_SIZE,
+        enter2,
+        centerX - enter2Width / 2,
         window.innerHeight - 30,
         1.5,
         0xffff00,
