@@ -16,6 +16,7 @@ import {
 } from "./constants.js";
 import primes_200 from "./primes_200.js";
 import { Player } from "./player.js";
+import { TextRenderer } from "./textRenderer.js";
 
 // AUDIO SOUNDTRACK
 // use it:
@@ -101,6 +102,9 @@ async function initGame() {
     (t) => (t.source.scaleMode = "nearest")
   );
 
+  // After the texture assets are loaded and scale mode is set
+  const textRenderer = new TextRenderer(texture);
+
   // Debug tilemap
   const debugTilemap = new DebugTilemap(
     app,
@@ -111,26 +115,7 @@ async function initGame() {
     1.5
   );
 
-  // Helper functions
-  function getTileIndex(char) {
-    return FONT_MAP[char.toUpperCase()] || null;
-  }
-
-  //old factor function. gave something like 2x4x6x8x10 etc.
-  function getFactors(num) {
-    const factors = [];
-    for (let i = 2; i <= Math.sqrt(num); i++) {
-      if (num % i === 0) {
-        factors.push(i);
-        if (i !== num / i) {
-          factors.push(num / i);
-        }
-      }
-    }
-    return factors.sort((a, b) => a - b);
-  }
-
-  // 🩶 PATCH START — New clean factor pair logic
+  // New clean factor pair logic
   // Wait -- we DONT CARE ABOUT 1. so lets start with i = 2 rather than i = 1
   // Also, you only need to check to the square root of the number you're factoring.
   function getFactorPairs(n) {
@@ -143,48 +128,6 @@ async function initGame() {
       }
     }
     return pairs;
-  }
-  // 🩶 PATCH END
-
-  function drawText(
-    text,
-    startX,
-    startY,
-    scale = 2,
-    color = 0xffffff,
-    container = app.stage
-  ) {
-    const chars = text.toUpperCase().split("");
-    const spacing = TILE_SIZE * scale;
-    const textSprites = [];
-
-    chars.forEach((char, i) => {
-      const tileIndex = getTileIndex(char);
-      if (tileIndex === null) return;
-
-      const x = tileIndex % TILES_HORIZONTAL;
-      const y = Math.floor(tileIndex / TILES_HORIZONTAL);
-
-      const tileTexture = new PIXI.Texture({
-        source: texture.source,
-        frame: new PIXI.Rectangle(
-          x * TILE_SIZE,
-          y * TILE_SIZE,
-          TILE_SIZE,
-          TILE_SIZE
-        ),
-      });
-
-      const sprite = new PIXI.Sprite(tileTexture);
-      sprite.x = startX + i * spacing;
-      sprite.y = startY;
-      sprite.scale.set(scale);
-      sprite.tint = color;
-      container.addChild(sprite);
-      textSprites.push(sprite);
-    });
-
-    return textSprites;
   }
 
   function isPortrait() {
@@ -345,49 +288,23 @@ async function initGame() {
 
       // Calculate text widths for proper centering
       const titleText = "PRIME DANGER";
-      const titleWidth = titleText.length * TILE_SIZE * scale;
+      // const titleWidth = titleText.length * TILE_SIZE * scale; // example without the getTextWidth function which does the same thing
+      const titleWidth = textRenderer.getTextWidth(titleText, scale);
 
       const enterText = "PRESS ENTER";
-      const enterWidth = enterText.length * TILE_SIZE * 1;
+      const enterWidth = textRenderer.getTextWidth(enterText, 1);
 
       const startText = "TO START";
-      const startWidth = startText.length * TILE_SIZE * 1;
+      const startWidth = textRenderer.getTextWidth(startText, 1);
 
       const findText = "FIND THE PRIMES";
-      const findWidth = findText.length * TILE_SIZE * 1;
+      const findWidth = textRenderer.getTextWidth(findText, 1);
 
-      drawText(
-        "PRIME DANGER",
-        centerX - titleWidth / 2,
-        centerY - 100,
-        scale,
-        0x00ff00,
-        this.titleContainer
-      );
-      drawText(
-        "PRESS ENTER",
-        centerX - enterWidth / 2,
-        centerY + 50,
-        1,
-        0xffff00,
-        this.titleContainer
-      );
-      drawText(
-        "TO START",
-        centerX - startWidth / 2,
-        centerY + 90,
-        1,
-        0xffff00,
-        this.titleContainer
-      );
-      drawText(
-        "FIND THE PRIMES",
-        centerX - findWidth / 2,
-        centerY + 140,
-        1,
-        0xffffff,
-        this.titleContainer
-      );
+      textRenderer.drawText("PRIME DANGER", centerX - titleWidth / 2, centerY - 100, scale, 0x00ff00, this.titleContainer);
+      textRenderer.drawText("PRESS ENTER", centerX - enterWidth / 2, centerY + 50, 1, 0xffff00, this.titleContainer);    
+      textRenderer.drawText("TO START", centerX - startWidth / 2, centerY + 90, 1, 0xffff00, this.titleContainer);
+      textRenderer.drawText("FIND THE PRIMES", centerX - findWidth / 2, centerY + 140, 1, 0xffffff, this.titleContainer);
+
     }
 
     startGame() {
@@ -503,14 +420,7 @@ async function initGame() {
           this.runes.push(rune);
 
           const numStr = this.currentNumbers[i].toString();
-          const numSprites = drawText(
-            numStr,
-            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
-            rune.y - 12,
-            textScale,
-            0xffffff,
-            this.runeContainer
-          );
+          const numSprites = textRenderer.drawText(numStr, rune.x - (numStr.length * TILE_SIZE * textScale) / 2, rune.y - 12, textScale, 0xffffff, this.runeContainer);
           this.runeNumbers.push({ sprites: numSprites, index: i });
         }
       } else {
@@ -535,14 +445,8 @@ async function initGame() {
           this.runes.push(rune);
 
           const numStr = this.currentNumbers[i].toString();
-          const numSprites = drawText(
-            numStr,
-            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
-            rune.y - 12,
-            textScale,
-            0xffffff,
-            this.runeContainer
-          );
+          const numSprites = textRenderer.drawText(numStr, rune.x - (numStr.length * TILE_SIZE * textScale) / 2, rune.y - 12, textScale, 0xffffff, this.runeContainer);
+
           this.runeNumbers.push({ sprites: numSprites, index: i });
         }
       }
@@ -585,7 +489,7 @@ async function initGame() {
           const factorScale = isPortrait() ? 1 : 2;
 
           pairs.forEach((pair, i) => {
-            drawText(
+            textRenderer.drawText(
               pair,
               rune.x - (pair.length * TILE_SIZE * factorScale) / 3,
               rune.y + 40 + i * (TILE_SIZE * factorScale * 1.1),
@@ -869,42 +773,15 @@ async function initGame() {
       this.uiContainer.removeChildren();
 
       const uiScale = isPortrait() ? 1.5 : 2;
-      drawText(
-        `ROUND ${this.round}/${this.maxRounds}`,
-        10,
-        10,
-        uiScale,
-        0xffffff,
-        this.uiContainer
-      );
-      drawText(
-        `SCORE ${this.player.score}`,
-        10,
-        40,
-        uiScale,
-        0x00ff00,
-        this.uiContainer
-      );
+      textRenderer.drawText(`ROUND ${this.round}/${this.maxRounds}`, 10, 10, uiScale, 0xffffff, this.uiContainer);
+      textRenderer.drawText(`SCORE ${this.player.score}`, 10, 40, uiScale, 0x00ff00, this.uiContainer);
 
       if (isPortrait()) {
-        drawText(
-          "TAP TO SELECT",
-          10,
-          window.innerHeight - 30,
-          1.5,
-          0xffff00,
-          this.uiContainer
-        );
+        textRenderer.drawText("TAP TO SELECT", 10, window.innerHeight - 30, 1.5, 0xffff00, this.uiContainer);
       } else {
-        drawText(
-          "PRESS 1 2 3 4 OR TAP",
-          10,
-          window.innerHeight - 40,
-          1.5,
-          0xffff00,
-          this.uiContainer
-        );
+        textRenderer.drawText("PRESS 1 2 3 4 OR TAP", 10, window.innerHeight - 40, 1.5, 0xffff00, this.uiContainer);
       }
+
     }
 
     endGame() {
@@ -935,7 +812,7 @@ async function initGame() {
 
       const endMsgWidth = endMessage.length * TILE_SIZE * titleScale;
 
-      drawText(
+      textRenderer.drawText(
         endMessage,
         centerX - endMsgWidth / 2,
         yPos,
@@ -951,7 +828,7 @@ async function initGame() {
       const scoreText = `SCORE ${this.player.score}`;
       const scoreWidth = scoreText.length * TILE_SIZE * 2;
 
-      drawText(
+      textRenderer.drawText(
         scoreText,
         centerX - scoreWidth / 2,
         yPos,
@@ -969,7 +846,7 @@ async function initGame() {
         const foundHeader = "FOUND";
         const foundHeaderWidth = foundHeader.length * TILE_SIZE * 1.5;
 
-        drawText(
+        textRenderer.drawText(
           foundHeader,
           centerX - foundHeaderWidth / 2,
           yPos,
@@ -985,7 +862,7 @@ async function initGame() {
         foundLines.forEach((line) => {
           const lineWidth = line.length * TILE_SIZE * 1.5;
 
-          drawText(
+          textRenderer.drawText(
             line,
             centerX - lineWidth / 2,
             yPos,
@@ -1007,7 +884,7 @@ async function initGame() {
         const missedHeader = "MISSED";
         const missedHeaderWidth = missedHeader.length * TILE_SIZE * 1.5;
 
-        drawText(
+        textRenderer.drawText(
           missedHeader,
           centerX - missedHeaderWidth / 2,
           yPos,
@@ -1023,7 +900,7 @@ async function initGame() {
         missedLines.forEach((line) => {
           const lineWidth = line.length * TILE_SIZE * 1.5;
 
-          drawText(
+          textRenderer.drawText(
             line,
             centerX - lineWidth / 2,
             yPos,
@@ -1043,7 +920,7 @@ async function initGame() {
       const enter1 = "PRESS ENTER";
       const enter1Width = enter1.length * TILE_SIZE * 1.5;
 
-      drawText(
+      textRenderer.drawText(
         enter1,
         centerX - enter1Width / 2,
         window.innerHeight - 60,
@@ -1055,7 +932,7 @@ async function initGame() {
       const enter2 = "TO PLAY AGAIN";
       const enter2Width = enter2.length * TILE_SIZE * 1.5;
 
-      drawText(
+      textRenderer.drawText(
         enter2,
         centerX - enter2Width / 2,
         window.innerHeight - 30,
