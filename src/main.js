@@ -18,6 +18,7 @@ import primes_200 from "./primes_200.js";
 import { Player } from "./player.js";
 import { TextRenderer } from "./textRenderer.js";
 import { PhysicsManager } from "./physicsManager.js";
+import { RuneManager } from "./runeManager.js";
 
 // AUDIO SOUNDTRACK
 // use it:
@@ -51,7 +52,7 @@ async function initGame() {
 
   document.querySelector("#game").appendChild(app.canvas);
   const physicsManager = new PhysicsManager();
-  
+
   // Load assets
   PIXI.Assets.add({
     alias: "tilemap",
@@ -87,6 +88,13 @@ async function initGame() {
 
   // After the texture assets are loaded and scale mode is set
   const textRenderer = new TextRenderer(texture);
+
+  // After creating textRenderer and physicsManager
+  const runeManager = new RuneManager(
+    { runeBlack, runeBlue, runeGrey },
+    textRenderer,
+    physicsManager
+  );
 
   // Debug tilemap
   const debugTilemap = new DebugTilemap(
@@ -125,9 +133,10 @@ async function initGame() {
   };
 
   class Game {
-    constructor(physicsManager, textRenderer) {
+    constructor(physicsManager, textRenderer, runeManager) {
       this.physicsManager = physicsManager;
       this.textRenderer = textRenderer;
+      this.runeManager = runeManager;
       this.state = GAME_STATE.TITLE;
       this.inputLocked = false; // 🧠 prevent spam input
       this.handleKeyDown = null; // 🎹 store listener reference
@@ -365,87 +374,13 @@ async function initGame() {
     }
 
     createRunes() {
-      this.runeContainer.removeChildren();
-      this.runes = [];
-      this.runeNumbers = [];
-
-      const portrait = isPortrait();
-      const runeScale = portrait ? 2 : 2.5;
-      const textScale = portrait ? 2 : 2.5;
-
-      if (portrait) {
-        const spacingX = window.innerWidth / 2.5;
-        const spacingY = 200;
-        const startX = window.innerWidth / 2 - spacingX / 2;
-        const startY = window.innerHeight / 2 - spacingY / 2;
-
-        for (let i = 0; i < 4; i++) {
-          const col = i % 2;
-          const row = Math.floor(i / 2);
-
-          const rune = new PIXI.Sprite(runeBlack);
-          rune.x = startX + col * spacingX;
-          rune.y = startY + row * spacingY;
-          rune.scale.set(runeScale);
-          rune.anchor.set(0.5);
-          rune.eventMode = "static";
-          rune.cursor = "pointer";
-          rune.runeIndex = i;
-
-          rune.on("pointerdown", () => this.selectRune(i));
-          rune.on("click", () => this.selectRune(i));
-
-          this.runeContainer.addChild(rune);
-          this.runes.push(rune);
-
-          const numStr = this.currentNumbers[i].toString();
-          const numSprites = textRenderer.drawText(
-            numStr,
-            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
-            rune.y - 12,
-            textScale,
-            0xffffff,
-            this.runeContainer
-          );
-          this.runeNumbers.push({ sprites: numSprites, index: i });
-        }
-      } else {
-        const spacing = Math.min(200, window.innerWidth / 5);
-        const startX = (window.innerWidth - spacing * 3) / 2;
-        const startY = window.innerHeight / 2 - 50;
-
-        for (let i = 0; i < 4; i++) {
-          const rune = new PIXI.Sprite(runeBlack);
-          rune.x = startX + i * spacing;
-          rune.y = startY;
-          rune.scale.set(runeScale);
-          rune.anchor.set(0.5);
-          rune.eventMode = "static";
-          rune.cursor = "pointer";
-          rune.runeIndex = i;
-
-          rune.on("pointerdown", () => this.selectRune(i));
-          rune.on("click", () => this.selectRune(i));
-
-          this.runeContainer.addChild(rune);
-          this.runes.push(rune);
-
-          const numStr = this.currentNumbers[i].toString();
-          const numSprites = textRenderer.drawText(
-            numStr,
-            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
-            rune.y - 12,
-            textScale,
-            0xffffff,
-            this.runeContainer
-          );
-
-          this.runeNumbers.push({ sprites: numSprites, index: i });
-        }
-      }
+      this.runeManager.createRunes(
+        this.currentNumbers,
+        this.runeContainer,
+        (index) => this.selectRune(index)
+      );
     }
 
-    // 🩶 PATCH START — updated selectRune using new factor pair logic
     selectRune(index) {
       if (this.state !== GAME_STATE.PLAYING || this.inputLocked) return;
 
@@ -459,30 +394,41 @@ async function initGame() {
         this.player.foundPrimes[this.currentNumbers[index]] = true;
         snd_good_blip();
 
-        this.runeNumbers[this.primeIndex].sprites.forEach(
-          (s) => (s.tint = 0x00ff00)
-        );
-        this.runes[index].texture = runeBlue;
+        // OLD CODE - REMOVE:
+        // this.runeNumbers[this.primeIndex].sprites.forEach(
+        //   (s) => (s.tint = 0x00ff00)
+        // );
+        // this.runes[index].texture = runeBlue;
+
+        // NEW CODE:
+        this.runeManager.updateRuneAppearance(index, "correct");
       } else {
         this.player.missedPrimes[this.currentNumbers[this.primeIndex]] = true;
 
-        this.runeNumbers[this.primeIndex].sprites.forEach(
-          (s) => (s.tint = 0x0000ff)
-        );
-        this.runes[this.primeIndex].texture = runeBlue;
+        // OLD CODE - REMOVE:
+        // this.runeNumbers[this.primeIndex].sprites.forEach(
+        //   (s) => (s.tint = 0x0000ff)
+        // );
+        // this.runes[this.primeIndex].texture = runeBlue;
+        //
+        // this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
+        // this.runes[index].texture = runeGrey;
 
-        this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
-        this.runes[index].texture = runeGrey;
+        // NEW CODE:
+        this.runeManager.updateRuneAppearance(this.primeIndex, "reveal");
+        this.runeManager.updateRuneAppearance(index, "wrong");
+
         snd_wrong_blip();
 
         // 🧮 Display factor pairs vertically
         const pairs = getFactorPairs(this.currentNumbers[index]);
         if (pairs.length > 0) {
-          const rune = this.runes[index];
-          const factorScale = isPortrait() ? 1 : 2;
+          const runes = this.runeManager.getRunes();
+          const rune = runes[index];
+          const factorScale = this.runeManager.isPortrait() ? 1 : 2;
 
           pairs.forEach((pair, i) => {
-            textRenderer.drawText(
+            this.textRenderer.drawText(
               pair,
               rune.x - (pair.length * TILE_SIZE * factorScale) / 3,
               rune.y + 40 + i * (TILE_SIZE * factorScale * 1.1),
@@ -496,10 +442,14 @@ async function initGame() {
         this.shakeScreen();
       }
 
-      this.runes.forEach((r) => {
-        r.eventMode = "none";
-        r.cursor = "default";
-      });
+      // OLD CODE - REMOVE:
+      // this.runes.forEach((r) => {
+      //   r.eventMode = "none";
+      //   r.cursor = "default";
+      // });
+
+      // NEW CODE:
+      this.runeManager.disableRuneInteraction();
 
       this.animateRunesFall();
 
@@ -508,7 +458,6 @@ async function initGame() {
         this.setupInput();
       }, 2000);
     }
-    // 🩶 PATCH END
 
     crumbleRune(rune, runeTexture, runeNumber, numberSprites, compaction = 0) {
       const baseWidth = runeTexture.width;
@@ -587,7 +536,7 @@ async function initGame() {
               density: 0.008 / (compaction + 1),
             }
           );
-          
+
           const velocityMult = 8 + compaction * 3;
 
           this.physicsManager.setVelocity(body, {
@@ -685,21 +634,25 @@ async function initGame() {
       const duration = 1000;
       const startTime = Date.now();
       const groundY = window.innerHeight - 150;
-      const initialPositions = this.runes.map((r) => ({ x: r.x, y: r.y }));
-      const textScale = isPortrait() ? 2 : 2.5;
+
+      // Get runes from manager
+      const runes = this.runeManager.getRunes();
+      const runeNumbers = this.runeManager.getRuneNumbers();
+      const initialPositions = runes.map((r) => ({ x: r.x, y: r.y }));
+      const textScale = this.runeManager.isPortrait() ? 2 : 2.5;
 
       const animate = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const easeProgress = progress * progress;
 
-        this.runes.forEach((rune, i) => {
+        runes.forEach((rune, i) => {
           rune.y =
             initialPositions[i].y +
             (groundY - initialPositions[i].y) * easeProgress;
 
           const numStr = this.currentNumbers[i].toString();
-          this.runeNumbers[i].sprites.forEach((sprite, j) => {
+          runeNumbers[i].sprites.forEach((sprite, j) => {
             sprite.x =
               rune.x -
               (numStr.length * TILE_SIZE * textScale) / 2 +
@@ -713,37 +666,41 @@ async function initGame() {
         } else {
           // Crumble ALL fallen runes when new ones land
           snd_boom();
-          const numFallen = this.fallenRunes.length;
-          this.fallenRunes.forEach((fallen, index) => {
+
+          const fallenRunes = this.runeManager.getFallenRunes();
+          const numFallen = fallenRunes.length;
+
+          fallenRunes.forEach((fallen, index) => {
             // Calculate compaction level - older runes (at bottom) are more compacted
             const compaction = numFallen - index - 1;
-            this.crumbleRune(
+            this.runeManager.crumbleRune(
               fallen.rune,
               fallen.texture,
               fallen.number,
               fallen.numberSprites,
-              compaction
+              compaction,
+              this.groundContainer
             );
             fallen.rune.destroy();
           });
 
           // Clear fallen runes array
-          this.fallenRunes = [];
+          this.runeManager.clearFallenRunes();
 
           // Move current runes to ground container and save them as fallen runes
-          this.runes.forEach((rune, i) => {
+          runes.forEach((rune, i) => {
             this.groundContainer.addChild(rune);
-            this.runeNumbers[i].sprites.forEach((s) => {
+            runeNumbers[i].sprites.forEach((s) => {
               this.groundContainer.addChild(s);
             });
 
             // Store this rune as a fallen rune
-            this.fallenRunes.push({
-              rune: rune,
-              texture: rune.texture,
-              number: this.currentNumbers[i],
-              numberSprites: this.runeNumbers[i].sprites,
-            });
+            this.runeManager.addFallenRune(
+              rune,
+              rune.texture,
+              this.currentNumbers[i],
+              runeNumbers[i].sprites
+            );
           });
 
           // Clear the rune container
@@ -974,6 +931,6 @@ async function initGame() {
     }
   }
 
-  const game = new Game(physicsManager, textRenderer);
+  const game = new Game(physicsManager, textRenderer, runeManager);
 }
 initGame();
