@@ -17,6 +17,7 @@ import {
 import primes_200 from "./primes_200.js";
 import { Player } from "./player.js";
 import { TextRenderer } from "./textRenderer.js";
+import { PhysicsManager } from "./physicsManager.js";
 
 // AUDIO SOUNDTRACK
 // use it:
@@ -49,26 +50,8 @@ async function initGame() {
   });
 
   document.querySelector("#game").appendChild(app.canvas);
-
-  // Matter.js setup
-  const Engine = Matter.Engine;
-  const World = Matter.World;
-  const Bodies = Matter.Bodies;
-  const Body = Matter.Body;
-
-  const engine = Engine.create();
-  engine.gravity.y = 2;
-
-  // Create ground
-  const ground = Bodies.rectangle(
-    window.innerWidth / 2,
-    window.innerHeight + 50,
-    window.innerWidth * 2,
-    100,
-    { isStatic: true }
-  );
-  World.add(engine.world, ground);
-
+  const physicsManager = new PhysicsManager();
+  
   // Load assets
   PIXI.Assets.add({
     alias: "tilemap",
@@ -142,7 +125,9 @@ async function initGame() {
   };
 
   class Game {
-    constructor() {
+    constructor(physicsManager, textRenderer) {
+      this.physicsManager = physicsManager;
+      this.textRenderer = textRenderer;
       this.state = GAME_STATE.TITLE;
       this.inputLocked = false; // 🧠 prevent spam input
       this.handleKeyDown = null; // 🎹 store listener reference
@@ -154,7 +139,6 @@ async function initGame() {
       this.primeIndex = -1;
       this.runes = [];
       this.runeNumbers = [];
-      this.physicsObjects = [];
       this.fallenRunes = []; // Track runes that have fallen
       this.runeContainer = new PIXI.Container();
       this.groundContainer = new PIXI.Container();
@@ -173,8 +157,7 @@ async function initGame() {
 
       // Start physics update loop
       app.ticker.add(() => {
-        Engine.update(engine, 1000 / 60);
-        this.updatePhysics();
+        physicsManager.update();
       });
 
       window.addEventListener("resize", () => {
@@ -185,31 +168,6 @@ async function initGame() {
           this.updateUI();
         } else if (this.state === GAME_STATE.GAME_OVER) {
           this.endGame();
-        }
-      });
-    }
-
-    updatePhysics() {
-      this.physicsObjects.forEach((obj) => {
-        if (obj.sprite && obj.body) {
-          obj.sprite.x = obj.body.position.x;
-          obj.sprite.y = obj.body.position.y;
-          obj.sprite.rotation = obj.body.angle;
-
-          // Stop moving rubble after a short time
-          if (obj.created && Date.now() - obj.created > 3000) {
-            Body.setStatic(obj.body, true);
-          }
-
-          // Also stop if velocity is very low
-          const vel = obj.body.velocity;
-          if (
-            Math.abs(vel.x) < 0.1 &&
-            Math.abs(vel.y) < 0.1 &&
-            Math.abs(obj.body.angularVelocity) < 0.01
-          ) {
-            Body.setStatic(obj.body, true);
-          }
         }
       });
     }
@@ -300,11 +258,38 @@ async function initGame() {
       const findText = "FIND THE PRIMES";
       const findWidth = textRenderer.getTextWidth(findText, 1);
 
-      textRenderer.drawText("PRIME DANGER", centerX - titleWidth / 2, centerY - 100, scale, 0x00ff00, this.titleContainer);
-      textRenderer.drawText("PRESS ENTER", centerX - enterWidth / 2, centerY + 50, 1, 0xffff00, this.titleContainer);    
-      textRenderer.drawText("TO START", centerX - startWidth / 2, centerY + 90, 1, 0xffff00, this.titleContainer);
-      textRenderer.drawText("FIND THE PRIMES", centerX - findWidth / 2, centerY + 140, 1, 0xffffff, this.titleContainer);
-
+      textRenderer.drawText(
+        "PRIME DANGER",
+        centerX - titleWidth / 2,
+        centerY - 100,
+        scale,
+        0x00ff00,
+        this.titleContainer
+      );
+      textRenderer.drawText(
+        "PRESS ENTER",
+        centerX - enterWidth / 2,
+        centerY + 50,
+        1,
+        0xffff00,
+        this.titleContainer
+      );
+      textRenderer.drawText(
+        "TO START",
+        centerX - startWidth / 2,
+        centerY + 90,
+        1,
+        0xffff00,
+        this.titleContainer
+      );
+      textRenderer.drawText(
+        "FIND THE PRIMES",
+        centerX - findWidth / 2,
+        centerY + 140,
+        1,
+        0xffffff,
+        this.titleContainer
+      );
     }
 
     startGame() {
@@ -320,10 +305,7 @@ async function initGame() {
       // audio.start();
 
       // Clear physics objects
-      this.physicsObjects.forEach((obj) => {
-        if (obj.body) World.remove(engine.world, obj.body);
-      });
-      this.physicsObjects = [];
+      this.physicsManager.clear();
       this.fallenRunes = [];
 
       this.nextRound();
@@ -338,10 +320,7 @@ async function initGame() {
       this.runeNumbers = [];
 
       // Clear physics objects
-      this.physicsObjects.forEach((obj) => {
-        if (obj.body) World.remove(engine.world, obj.body);
-      });
-      this.physicsObjects = [];
+      this.physicsManager.clear();
       this.fallenRunes = [];
 
       this.showTitle();
@@ -420,7 +399,14 @@ async function initGame() {
           this.runes.push(rune);
 
           const numStr = this.currentNumbers[i].toString();
-          const numSprites = textRenderer.drawText(numStr, rune.x - (numStr.length * TILE_SIZE * textScale) / 2, rune.y - 12, textScale, 0xffffff, this.runeContainer);
+          const numSprites = textRenderer.drawText(
+            numStr,
+            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
+            rune.y - 12,
+            textScale,
+            0xffffff,
+            this.runeContainer
+          );
           this.runeNumbers.push({ sprites: numSprites, index: i });
         }
       } else {
@@ -445,7 +431,14 @@ async function initGame() {
           this.runes.push(rune);
 
           const numStr = this.currentNumbers[i].toString();
-          const numSprites = textRenderer.drawText(numStr, rune.x - (numStr.length * TILE_SIZE * textScale) / 2, rune.y - 12, textScale, 0xffffff, this.runeContainer);
+          const numSprites = textRenderer.drawText(
+            numStr,
+            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
+            rune.y - 12,
+            textScale,
+            0xffffff,
+            this.runeContainer
+          );
 
           this.runeNumbers.push({ sprites: numSprites, index: i });
         }
@@ -583,7 +576,7 @@ async function initGame() {
 
           this.groundContainer.addChild(piece);
 
-          const body = Bodies.rectangle(
+          const body = this.physicsManager.createRectangleBody(
             worldX,
             worldY,
             scaledWidth,
@@ -591,23 +584,22 @@ async function initGame() {
             {
               friction: 0.3,
               restitution: 0.4,
-              density: 0.008 / (compaction + 1), // Lighter pieces when more compacted
+              density: 0.008 / (compaction + 1),
             }
           );
-
-          // More compaction = more violent explosion but pieces settle faster
+          
           const velocityMult = 8 + compaction * 3;
-          Body.setVelocity(body, {
+
+          this.physicsManager.setVelocity(body, {
             x: (Math.random() - 0.5) * velocityMult,
             y: -5 - Math.random() * velocityMult,
           });
-          Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.4);
+          this.physicsManager.setAngularVelocity(
+            body,
+            (Math.random() - 0.5) * 0.4
+          );
 
-          World.add(engine.world, body);
-
-          const physicsObj = { sprite: piece, body: body, created: Date.now() };
-          this.physicsObjects.push(physicsObj);
-
+          this.physicsManager.addPhysicsObject(piece, body);
           currentX += actualWidth;
         }
 
@@ -618,17 +610,17 @@ async function initGame() {
       }
 
       // Also crumble the number sprites with varying sizes
+      // Also crumble the number sprites with varying sizes
       if (numberSprites) {
         numberSprites.forEach((sprite) => {
-          // Break each number character into smaller pieces
           const charWidth = sprite.width;
           const charHeight = sprite.height;
-          const numPieces = compaction > 1 ? 4 : 2; // More pieces when compacted
+          const numPieces = compaction > 1 ? 4 : 2;
           const pieceSize = charWidth / numPieces;
 
           for (let i = 0; i < numPieces; i++) {
             for (let j = 0; j < numPieces; j++) {
-              if (Math.random() < 0.2) continue; // Skip some for irregular look
+              if (Math.random() < 0.2) continue;
 
               const miniPiece = new PIXI.Sprite(sprite.texture);
               miniPiece.x = sprite.x + i * pieceSize;
@@ -639,7 +631,7 @@ async function initGame() {
 
               this.groundContainer.addChild(miniPiece);
 
-              const body = Bodies.rectangle(
+              const body = this.physicsManager.createRectangleBody(
                 miniPiece.x,
                 miniPiece.y,
                 pieceSize,
@@ -651,17 +643,12 @@ async function initGame() {
                 }
               );
 
-              Body.setVelocity(body, {
+              this.physicsManager.setVelocity(body, {
                 x: (Math.random() - 0.5) * (6 + compaction * 2),
                 y: -4 - Math.random() * (4 + compaction * 2),
               });
 
-              World.add(engine.world, body);
-              this.physicsObjects.push({
-                sprite: miniPiece,
-                body: body,
-                created: Date.now(),
-              });
+              this.physicsManager.addPhysicsObject(miniPiece, body);
             }
           }
 
@@ -773,15 +760,42 @@ async function initGame() {
       this.uiContainer.removeChildren();
 
       const uiScale = isPortrait() ? 1.5 : 2;
-      textRenderer.drawText(`ROUND ${this.round}/${this.maxRounds}`, 10, 10, uiScale, 0xffffff, this.uiContainer);
-      textRenderer.drawText(`SCORE ${this.player.score}`, 10, 40, uiScale, 0x00ff00, this.uiContainer);
+      textRenderer.drawText(
+        `ROUND ${this.round}/${this.maxRounds}`,
+        10,
+        10,
+        uiScale,
+        0xffffff,
+        this.uiContainer
+      );
+      textRenderer.drawText(
+        `SCORE ${this.player.score}`,
+        10,
+        40,
+        uiScale,
+        0x00ff00,
+        this.uiContainer
+      );
 
       if (isPortrait()) {
-        textRenderer.drawText("TAP TO SELECT", 10, window.innerHeight - 30, 1.5, 0xffff00, this.uiContainer);
+        textRenderer.drawText(
+          "TAP TO SELECT",
+          10,
+          window.innerHeight - 30,
+          1.5,
+          0xffff00,
+          this.uiContainer
+        );
       } else {
-        textRenderer.drawText("PRESS 1 2 3 4 OR TAP", 10, window.innerHeight - 40, 1.5, 0xffff00, this.uiContainer);
+        textRenderer.drawText(
+          "PRESS 1 2 3 4 OR TAP",
+          10,
+          window.innerHeight - 40,
+          1.5,
+          0xffff00,
+          this.uiContainer
+        );
       }
-
     }
 
     endGame() {
@@ -793,7 +807,7 @@ async function initGame() {
       audio.fadeOut();
 
       const centerX = window.innerWidth / 2;
-      const titleScale = isPortrait() ? 3 : 5;
+      const titleScale = isPortrait() ? 2 : 5;
       let yPos = 50;
 
       // -------------------------------
@@ -960,6 +974,6 @@ async function initGame() {
     }
   }
 
-  const game = new Game();
+  const game = new Game(physicsManager, textRenderer);
 }
 initGame();
