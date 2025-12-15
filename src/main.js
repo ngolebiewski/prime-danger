@@ -402,6 +402,43 @@ async function initGame() {
 
         // NEW CODE:
         this.runeManager.updateRuneAppearance(index, "correct");
+        
+        // Show "CORRECT" text above the rune
+        const runes = this.runeManager.getRunes();
+        const rune = runes[index];
+        const correctScale = this.runeManager.isPortrait() ? 1.5 : 2;
+        const correctText = "CORRECT";
+        const correctWidth = this.textRenderer.getTextWidth(correctText, correctScale);
+        
+        const correctContainer = new PIXI.Container();
+        this.runeContainer.addChild(correctContainer);
+        
+        this.textRenderer.drawText(
+          correctText,
+          rune.x - correctWidth / 2,
+          rune.y - 80,
+          correctScale,
+          0x00ff00,
+          correctContainer
+        );
+        
+        // Fade out animation
+        const startTime = Date.now();
+        const fadeDuration = 1000;
+        
+        const fade = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = elapsed / fadeDuration;
+          
+          if (progress < 1) {
+            correctContainer.alpha = 1 - progress;
+            requestAnimationFrame(fade);
+          } else {
+            correctContainer.destroy();
+          }
+        };
+        
+        fade();
       } else {
         this.player.missedPrimes[this.currentNumbers[this.primeIndex]] = true;
 
