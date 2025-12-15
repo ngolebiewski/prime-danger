@@ -16,6 +16,9 @@ import {
 } from "./constants.js";
 import primes_200 from "./primes_200.js";
 import { Player } from "./player.js";
+import { TextRenderer } from "./textRenderer.js";
+import { PhysicsManager } from "./physicsManager.js";
+import { RuneManager } from "./runeManager.js";
 
 // AUDIO SOUNDTRACK
 // use it:
@@ -48,25 +51,7 @@ async function initGame() {
   });
 
   document.querySelector("#game").appendChild(app.canvas);
-
-  // Matter.js setup
-  const Engine = Matter.Engine;
-  const World = Matter.World;
-  const Bodies = Matter.Bodies;
-  const Body = Matter.Body;
-
-  const engine = Engine.create();
-  engine.gravity.y = 2;
-
-  // Create ground
-  const ground = Bodies.rectangle(
-    window.innerWidth / 2,
-    window.innerHeight + 50,
-    window.innerWidth * 2,
-    100,
-    { isStatic: true }
-  );
-  World.add(engine.world, ground);
+  const physicsManager = new PhysicsManager();
 
   // Load assets
   PIXI.Assets.add({
@@ -101,6 +86,16 @@ async function initGame() {
     (t) => (t.source.scaleMode = "nearest")
   );
 
+  // After the texture assets are loaded and scale mode is set
+  const textRenderer = new TextRenderer(texture);
+
+  // After creating textRenderer and physicsManager
+  const runeManager = new RuneManager(
+    { runeBlack, runeBlue, runeGrey },
+    textRenderer,
+    physicsManager
+  );
+
   // Debug tilemap
   const debugTilemap = new DebugTilemap(
     app,
@@ -111,26 +106,7 @@ async function initGame() {
     1.5
   );
 
-  // Helper functions
-  function getTileIndex(char) {
-    return FONT_MAP[char.toUpperCase()] || null;
-  }
-
-  //old factor function. gave something like 2x4x6x8x10 etc.
-  function getFactors(num) {
-    const factors = [];
-    for (let i = 2; i <= Math.sqrt(num); i++) {
-      if (num % i === 0) {
-        factors.push(i);
-        if (i !== num / i) {
-          factors.push(num / i);
-        }
-      }
-    }
-    return factors.sort((a, b) => a - b);
-  }
-
-  // 🩶 PATCH START — New clean factor pair logic
+  // New clean factor pair logic
   // Wait -- we DONT CARE ABOUT 1. so lets start with i = 2 rather than i = 1
   // Also, you only need to check to the square root of the number you're factoring.
   function getFactorPairs(n) {
@@ -143,48 +119,6 @@ async function initGame() {
       }
     }
     return pairs;
-  }
-  // 🩶 PATCH END
-
-  function drawText(
-    text,
-    startX,
-    startY,
-    scale = 2,
-    color = 0xffffff,
-    container = app.stage
-  ) {
-    const chars = text.toUpperCase().split("");
-    const spacing = TILE_SIZE * scale;
-    const textSprites = [];
-
-    chars.forEach((char, i) => {
-      const tileIndex = getTileIndex(char);
-      if (tileIndex === null) return;
-
-      const x = tileIndex % TILES_HORIZONTAL;
-      const y = Math.floor(tileIndex / TILES_HORIZONTAL);
-
-      const tileTexture = new PIXI.Texture({
-        source: texture.source,
-        frame: new PIXI.Rectangle(
-          x * TILE_SIZE,
-          y * TILE_SIZE,
-          TILE_SIZE,
-          TILE_SIZE
-        ),
-      });
-
-      const sprite = new PIXI.Sprite(tileTexture);
-      sprite.x = startX + i * spacing;
-      sprite.y = startY;
-      sprite.scale.set(scale);
-      sprite.tint = color;
-      container.addChild(sprite);
-      textSprites.push(sprite);
-    });
-
-    return textSprites;
   }
 
   function isPortrait() {
@@ -199,7 +133,10 @@ async function initGame() {
   };
 
   class Game {
-    constructor() {
+    constructor(physicsManager, textRenderer, runeManager) {
+      this.physicsManager = physicsManager;
+      this.textRenderer = textRenderer;
+      this.runeManager = runeManager;
       this.state = GAME_STATE.TITLE;
       this.inputLocked = false; // 🧠 prevent spam input
       this.handleKeyDown = null; // 🎹 store listener reference
@@ -211,7 +148,6 @@ async function initGame() {
       this.primeIndex = -1;
       this.runes = [];
       this.runeNumbers = [];
-      this.physicsObjects = [];
       this.fallenRunes = []; // Track runes that have fallen
       this.runeContainer = new PIXI.Container();
       this.groundContainer = new PIXI.Container();
@@ -230,8 +166,7 @@ async function initGame() {
 
       // Start physics update loop
       app.ticker.add(() => {
-        Engine.update(engine, 1000 / 60);
-        this.updatePhysics();
+        physicsManager.update();
       });
 
       window.addEventListener("resize", () => {
@@ -242,31 +177,6 @@ async function initGame() {
           this.updateUI();
         } else if (this.state === GAME_STATE.GAME_OVER) {
           this.endGame();
-        }
-      });
-    }
-
-    updatePhysics() {
-      this.physicsObjects.forEach((obj) => {
-        if (obj.sprite && obj.body) {
-          obj.sprite.x = obj.body.position.x;
-          obj.sprite.y = obj.body.position.y;
-          obj.sprite.rotation = obj.body.angle;
-
-          // Stop moving rubble after a short time
-          if (obj.created && Date.now() - obj.created > 3000) {
-            Body.setStatic(obj.body, true);
-          }
-
-          // Also stop if velocity is very low
-          const vel = obj.body.velocity;
-          if (
-            Math.abs(vel.x) < 0.1 &&
-            Math.abs(vel.y) < 0.1 &&
-            Math.abs(obj.body.angularVelocity) < 0.01
-          ) {
-            Body.setStatic(obj.body, true);
-          }
         }
       });
     }
@@ -345,18 +255,19 @@ async function initGame() {
 
       // Calculate text widths for proper centering
       const titleText = "PRIME DANGER";
-      const titleWidth = titleText.length * TILE_SIZE * scale;
+      // const titleWidth = titleText.length * TILE_SIZE * scale; // example without the getTextWidth function which does the same thing
+      const titleWidth = textRenderer.getTextWidth(titleText, scale);
 
       const enterText = "PRESS ENTER";
-      const enterWidth = enterText.length * TILE_SIZE * 1;
+      const enterWidth = textRenderer.getTextWidth(enterText, 1);
 
       const startText = "TO START";
-      const startWidth = startText.length * TILE_SIZE * 1;
+      const startWidth = textRenderer.getTextWidth(startText, 1);
 
       const findText = "FIND THE PRIMES";
-      const findWidth = findText.length * TILE_SIZE * 1;
+      const findWidth = textRenderer.getTextWidth(findText, 1);
 
-      drawText(
+      textRenderer.drawText(
         "PRIME DANGER",
         centerX - titleWidth / 2,
         centerY - 100,
@@ -364,7 +275,7 @@ async function initGame() {
         0x00ff00,
         this.titleContainer
       );
-      drawText(
+      textRenderer.drawText(
         "PRESS ENTER",
         centerX - enterWidth / 2,
         centerY + 50,
@@ -372,7 +283,7 @@ async function initGame() {
         0xffff00,
         this.titleContainer
       );
-      drawText(
+      textRenderer.drawText(
         "TO START",
         centerX - startWidth / 2,
         centerY + 90,
@@ -380,7 +291,7 @@ async function initGame() {
         0xffff00,
         this.titleContainer
       );
-      drawText(
+      textRenderer.drawText(
         "FIND THE PRIMES",
         centerX - findWidth / 2,
         centerY + 140,
@@ -403,10 +314,7 @@ async function initGame() {
       // audio.start();
 
       // Clear physics objects
-      this.physicsObjects.forEach((obj) => {
-        if (obj.body) World.remove(engine.world, obj.body);
-      });
-      this.physicsObjects = [];
+      this.physicsManager.clear();
       this.fallenRunes = [];
 
       this.nextRound();
@@ -421,10 +329,7 @@ async function initGame() {
       this.runeNumbers = [];
 
       // Clear physics objects
-      this.physicsObjects.forEach((obj) => {
-        if (obj.body) World.remove(engine.world, obj.body);
-      });
-      this.physicsObjects = [];
+      this.physicsManager.clear();
       this.fallenRunes = [];
 
       this.showTitle();
@@ -469,86 +374,13 @@ async function initGame() {
     }
 
     createRunes() {
-      this.runeContainer.removeChildren();
-      this.runes = [];
-      this.runeNumbers = [];
-
-      const portrait = isPortrait();
-      const runeScale = portrait ? 2 : 2.5;
-      const textScale = portrait ? 2 : 2.5;
-
-      if (portrait) {
-        const spacingX = window.innerWidth / 2.5;
-        const spacingY = 200;
-        const startX = window.innerWidth / 2 - spacingX / 2;
-        const startY = window.innerHeight / 2 - spacingY / 2;
-
-        for (let i = 0; i < 4; i++) {
-          const col = i % 2;
-          const row = Math.floor(i / 2);
-
-          const rune = new PIXI.Sprite(runeBlack);
-          rune.x = startX + col * spacingX;
-          rune.y = startY + row * spacingY;
-          rune.scale.set(runeScale);
-          rune.anchor.set(0.5);
-          rune.eventMode = "static";
-          rune.cursor = "pointer";
-          rune.runeIndex = i;
-
-          rune.on("pointerdown", () => this.selectRune(i));
-          rune.on("click", () => this.selectRune(i));
-
-          this.runeContainer.addChild(rune);
-          this.runes.push(rune);
-
-          const numStr = this.currentNumbers[i].toString();
-          const numSprites = drawText(
-            numStr,
-            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
-            rune.y - 12,
-            textScale,
-            0xffffff,
-            this.runeContainer
-          );
-          this.runeNumbers.push({ sprites: numSprites, index: i });
-        }
-      } else {
-        const spacing = Math.min(200, window.innerWidth / 5);
-        const startX = (window.innerWidth - spacing * 3) / 2;
-        const startY = window.innerHeight / 2 - 50;
-
-        for (let i = 0; i < 4; i++) {
-          const rune = new PIXI.Sprite(runeBlack);
-          rune.x = startX + i * spacing;
-          rune.y = startY;
-          rune.scale.set(runeScale);
-          rune.anchor.set(0.5);
-          rune.eventMode = "static";
-          rune.cursor = "pointer";
-          rune.runeIndex = i;
-
-          rune.on("pointerdown", () => this.selectRune(i));
-          rune.on("click", () => this.selectRune(i));
-
-          this.runeContainer.addChild(rune);
-          this.runes.push(rune);
-
-          const numStr = this.currentNumbers[i].toString();
-          const numSprites = drawText(
-            numStr,
-            rune.x - (numStr.length * TILE_SIZE * textScale) / 2,
-            rune.y - 12,
-            textScale,
-            0xffffff,
-            this.runeContainer
-          );
-          this.runeNumbers.push({ sprites: numSprites, index: i });
-        }
-      }
+      this.runeManager.createRunes(
+        this.currentNumbers,
+        this.runeContainer,
+        (index) => this.selectRune(index)
+      );
     }
 
-    // 🩶 PATCH START — updated selectRune using new factor pair logic
     selectRune(index) {
       if (this.state !== GAME_STATE.PLAYING || this.inputLocked) return;
 
@@ -562,30 +394,78 @@ async function initGame() {
         this.player.foundPrimes[this.currentNumbers[index]] = true;
         snd_good_blip();
 
-        this.runeNumbers[this.primeIndex].sprites.forEach(
-          (s) => (s.tint = 0x00ff00)
+        // OLD CODE - REMOVE:
+        // this.runeNumbers[this.primeIndex].sprites.forEach(
+        //   (s) => (s.tint = 0x00ff00)
+        // );
+        // this.runes[index].texture = runeBlue;
+
+        // NEW CODE:
+        this.runeManager.updateRuneAppearance(index, "correct");
+        
+        // Show "CORRECT" text above the rune
+        const runes = this.runeManager.getRunes();
+        const rune = runes[index];
+        const correctScale = this.runeManager.isPortrait() ? 1.5 : 2;
+        const correctText = "CORRECT";
+        const correctWidth = this.textRenderer.getTextWidth(correctText, correctScale);
+        
+        const correctContainer = new PIXI.Container();
+        this.runeContainer.addChild(correctContainer);
+        
+        this.textRenderer.drawText(
+          correctText,
+          rune.x - correctWidth / 2,
+          rune.y - 80,
+          correctScale,
+          0x00ff00,
+          correctContainer
         );
-        this.runes[index].texture = runeBlue;
+        
+        // Fade out animation
+        const startTime = Date.now();
+        const fadeDuration = 1000;
+        
+        const fade = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = elapsed / fadeDuration;
+          
+          if (progress < 1) {
+            correctContainer.alpha = 1 - progress;
+            requestAnimationFrame(fade);
+          } else {
+            correctContainer.destroy();
+          }
+        };
+        
+        fade();
       } else {
         this.player.missedPrimes[this.currentNumbers[this.primeIndex]] = true;
 
-        this.runeNumbers[this.primeIndex].sprites.forEach(
-          (s) => (s.tint = 0x0000ff)
-        );
-        this.runes[this.primeIndex].texture = runeBlue;
+        // OLD CODE - REMOVE:
+        // this.runeNumbers[this.primeIndex].sprites.forEach(
+        //   (s) => (s.tint = 0x0000ff)
+        // );
+        // this.runes[this.primeIndex].texture = runeBlue;
+        //
+        // this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
+        // this.runes[index].texture = runeGrey;
 
-        this.runeNumbers[index].sprites.forEach((s) => (s.tint = 0xff0000));
-        this.runes[index].texture = runeGrey;
+        // NEW CODE:
+        this.runeManager.updateRuneAppearance(this.primeIndex, "reveal");
+        this.runeManager.updateRuneAppearance(index, "wrong");
+
         snd_wrong_blip();
 
         // 🧮 Display factor pairs vertically
         const pairs = getFactorPairs(this.currentNumbers[index]);
         if (pairs.length > 0) {
-          const rune = this.runes[index];
-          const factorScale = isPortrait() ? 1 : 2;
+          const runes = this.runeManager.getRunes();
+          const rune = runes[index];
+          const factorScale = this.runeManager.isPortrait() ? 1 : 2;
 
           pairs.forEach((pair, i) => {
-            drawText(
+            this.textRenderer.drawText(
               pair,
               rune.x - (pair.length * TILE_SIZE * factorScale) / 3,
               rune.y + 40 + i * (TILE_SIZE * factorScale * 1.1),
@@ -599,10 +479,14 @@ async function initGame() {
         this.shakeScreen();
       }
 
-      this.runes.forEach((r) => {
-        r.eventMode = "none";
-        r.cursor = "default";
-      });
+      // OLD CODE - REMOVE:
+      // this.runes.forEach((r) => {
+      //   r.eventMode = "none";
+      //   r.cursor = "default";
+      // });
+
+      // NEW CODE:
+      this.runeManager.disableRuneInteraction();
 
       this.animateRunesFall();
 
@@ -611,7 +495,6 @@ async function initGame() {
         this.setupInput();
       }, 2000);
     }
-    // 🩶 PATCH END
 
     crumbleRune(rune, runeTexture, runeNumber, numberSprites, compaction = 0) {
       const baseWidth = runeTexture.width;
@@ -679,7 +562,7 @@ async function initGame() {
 
           this.groundContainer.addChild(piece);
 
-          const body = Bodies.rectangle(
+          const body = this.physicsManager.createRectangleBody(
             worldX,
             worldY,
             scaledWidth,
@@ -687,23 +570,22 @@ async function initGame() {
             {
               friction: 0.3,
               restitution: 0.4,
-              density: 0.008 / (compaction + 1), // Lighter pieces when more compacted
+              density: 0.008 / (compaction + 1),
             }
           );
 
-          // More compaction = more violent explosion but pieces settle faster
           const velocityMult = 8 + compaction * 3;
-          Body.setVelocity(body, {
+
+          this.physicsManager.setVelocity(body, {
             x: (Math.random() - 0.5) * velocityMult,
             y: -5 - Math.random() * velocityMult,
           });
-          Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.4);
+          this.physicsManager.setAngularVelocity(
+            body,
+            (Math.random() - 0.5) * 0.4
+          );
 
-          World.add(engine.world, body);
-
-          const physicsObj = { sprite: piece, body: body, created: Date.now() };
-          this.physicsObjects.push(physicsObj);
-
+          this.physicsManager.addPhysicsObject(piece, body);
           currentX += actualWidth;
         }
 
@@ -714,17 +596,17 @@ async function initGame() {
       }
 
       // Also crumble the number sprites with varying sizes
+      // Also crumble the number sprites with varying sizes
       if (numberSprites) {
         numberSprites.forEach((sprite) => {
-          // Break each number character into smaller pieces
           const charWidth = sprite.width;
           const charHeight = sprite.height;
-          const numPieces = compaction > 1 ? 4 : 2; // More pieces when compacted
+          const numPieces = compaction > 1 ? 4 : 2;
           const pieceSize = charWidth / numPieces;
 
           for (let i = 0; i < numPieces; i++) {
             for (let j = 0; j < numPieces; j++) {
-              if (Math.random() < 0.2) continue; // Skip some for irregular look
+              if (Math.random() < 0.2) continue;
 
               const miniPiece = new PIXI.Sprite(sprite.texture);
               miniPiece.x = sprite.x + i * pieceSize;
@@ -735,7 +617,7 @@ async function initGame() {
 
               this.groundContainer.addChild(miniPiece);
 
-              const body = Bodies.rectangle(
+              const body = this.physicsManager.createRectangleBody(
                 miniPiece.x,
                 miniPiece.y,
                 pieceSize,
@@ -747,17 +629,12 @@ async function initGame() {
                 }
               );
 
-              Body.setVelocity(body, {
+              this.physicsManager.setVelocity(body, {
                 x: (Math.random() - 0.5) * (6 + compaction * 2),
                 y: -4 - Math.random() * (4 + compaction * 2),
               });
 
-              World.add(engine.world, body);
-              this.physicsObjects.push({
-                sprite: miniPiece,
-                body: body,
-                created: Date.now(),
-              });
+              this.physicsManager.addPhysicsObject(miniPiece, body);
             }
           }
 
@@ -794,21 +671,25 @@ async function initGame() {
       const duration = 1000;
       const startTime = Date.now();
       const groundY = window.innerHeight - 150;
-      const initialPositions = this.runes.map((r) => ({ x: r.x, y: r.y }));
-      const textScale = isPortrait() ? 2 : 2.5;
+
+      // Get runes from manager
+      const runes = this.runeManager.getRunes();
+      const runeNumbers = this.runeManager.getRuneNumbers();
+      const initialPositions = runes.map((r) => ({ x: r.x, y: r.y }));
+      const textScale = this.runeManager.isPortrait() ? 2 : 2.5;
 
       const animate = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const easeProgress = progress * progress;
 
-        this.runes.forEach((rune, i) => {
+        runes.forEach((rune, i) => {
           rune.y =
             initialPositions[i].y +
             (groundY - initialPositions[i].y) * easeProgress;
 
           const numStr = this.currentNumbers[i].toString();
-          this.runeNumbers[i].sprites.forEach((sprite, j) => {
+          runeNumbers[i].sprites.forEach((sprite, j) => {
             sprite.x =
               rune.x -
               (numStr.length * TILE_SIZE * textScale) / 2 +
@@ -822,37 +703,41 @@ async function initGame() {
         } else {
           // Crumble ALL fallen runes when new ones land
           snd_boom();
-          const numFallen = this.fallenRunes.length;
-          this.fallenRunes.forEach((fallen, index) => {
+
+          const fallenRunes = this.runeManager.getFallenRunes();
+          const numFallen = fallenRunes.length;
+
+          fallenRunes.forEach((fallen, index) => {
             // Calculate compaction level - older runes (at bottom) are more compacted
             const compaction = numFallen - index - 1;
-            this.crumbleRune(
+            this.runeManager.crumbleRune(
               fallen.rune,
               fallen.texture,
               fallen.number,
               fallen.numberSprites,
-              compaction
+              compaction,
+              this.groundContainer
             );
             fallen.rune.destroy();
           });
 
           // Clear fallen runes array
-          this.fallenRunes = [];
+          this.runeManager.clearFallenRunes();
 
           // Move current runes to ground container and save them as fallen runes
-          this.runes.forEach((rune, i) => {
+          runes.forEach((rune, i) => {
             this.groundContainer.addChild(rune);
-            this.runeNumbers[i].sprites.forEach((s) => {
+            runeNumbers[i].sprites.forEach((s) => {
               this.groundContainer.addChild(s);
             });
 
             // Store this rune as a fallen rune
-            this.fallenRunes.push({
-              rune: rune,
-              texture: rune.texture,
-              number: this.currentNumbers[i],
-              numberSprites: this.runeNumbers[i].sprites,
-            });
+            this.runeManager.addFallenRune(
+              rune,
+              rune.texture,
+              this.currentNumbers[i],
+              runeNumbers[i].sprites
+            );
           });
 
           // Clear the rune container
@@ -869,7 +754,7 @@ async function initGame() {
       this.uiContainer.removeChildren();
 
       const uiScale = isPortrait() ? 1.5 : 2;
-      drawText(
+      textRenderer.drawText(
         `ROUND ${this.round}/${this.maxRounds}`,
         10,
         10,
@@ -877,7 +762,7 @@ async function initGame() {
         0xffffff,
         this.uiContainer
       );
-      drawText(
+      textRenderer.drawText(
         `SCORE ${this.player.score}`,
         10,
         40,
@@ -887,7 +772,7 @@ async function initGame() {
       );
 
       if (isPortrait()) {
-        drawText(
+        textRenderer.drawText(
           "TAP TO SELECT",
           10,
           window.innerHeight - 30,
@@ -896,7 +781,7 @@ async function initGame() {
           this.uiContainer
         );
       } else {
-        drawText(
+        textRenderer.drawText(
           "PRESS 1 2 3 4 OR TAP",
           10,
           window.innerHeight - 40,
@@ -916,7 +801,7 @@ async function initGame() {
       audio.fadeOut();
 
       const centerX = window.innerWidth / 2;
-      const titleScale = isPortrait() ? 3 : 5;
+      const titleScale = isPortrait() ? 2 : 5;
       let yPos = 50;
 
       // -------------------------------
@@ -935,7 +820,7 @@ async function initGame() {
 
       const endMsgWidth = endMessage.length * TILE_SIZE * titleScale;
 
-      drawText(
+      textRenderer.drawText(
         endMessage,
         centerX - endMsgWidth / 2,
         yPos,
@@ -951,7 +836,7 @@ async function initGame() {
       const scoreText = `SCORE ${this.player.score}`;
       const scoreWidth = scoreText.length * TILE_SIZE * 2;
 
-      drawText(
+      textRenderer.drawText(
         scoreText,
         centerX - scoreWidth / 2,
         yPos,
@@ -969,7 +854,7 @@ async function initGame() {
         const foundHeader = "FOUND";
         const foundHeaderWidth = foundHeader.length * TILE_SIZE * 1.5;
 
-        drawText(
+        textRenderer.drawText(
           foundHeader,
           centerX - foundHeaderWidth / 2,
           yPos,
@@ -985,7 +870,7 @@ async function initGame() {
         foundLines.forEach((line) => {
           const lineWidth = line.length * TILE_SIZE * 1.5;
 
-          drawText(
+          textRenderer.drawText(
             line,
             centerX - lineWidth / 2,
             yPos,
@@ -1007,7 +892,7 @@ async function initGame() {
         const missedHeader = "MISSED";
         const missedHeaderWidth = missedHeader.length * TILE_SIZE * 1.5;
 
-        drawText(
+        textRenderer.drawText(
           missedHeader,
           centerX - missedHeaderWidth / 2,
           yPos,
@@ -1023,7 +908,7 @@ async function initGame() {
         missedLines.forEach((line) => {
           const lineWidth = line.length * TILE_SIZE * 1.5;
 
-          drawText(
+          textRenderer.drawText(
             line,
             centerX - lineWidth / 2,
             yPos,
@@ -1043,7 +928,7 @@ async function initGame() {
       const enter1 = "PRESS ENTER";
       const enter1Width = enter1.length * TILE_SIZE * 1.5;
 
-      drawText(
+      textRenderer.drawText(
         enter1,
         centerX - enter1Width / 2,
         window.innerHeight - 60,
@@ -1055,7 +940,7 @@ async function initGame() {
       const enter2 = "TO PLAY AGAIN";
       const enter2Width = enter2.length * TILE_SIZE * 1.5;
 
-      drawText(
+      textRenderer.drawText(
         enter2,
         centerX - enter2Width / 2,
         window.innerHeight - 30,
@@ -1083,6 +968,6 @@ async function initGame() {
     }
   }
 
-  const game = new Game();
+  const game = new Game(physicsManager, textRenderer, runeManager);
 }
 initGame();
