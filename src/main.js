@@ -56,19 +56,19 @@ async function initGame() {
   // Load assets
   PIXI.Assets.add({
     alias: "tilemap",
-    src: "/art/monochrome-transparent_packed.png",
+    src: "art/monochrome-transparent_packed.png",
   });
   PIXI.Assets.add({
     alias: "runeBlack",
-    src: "/art/runeBlack_slabOutline_035.png",
+    src: "art/runeBlack_slabOutline_035.png",
   });
   PIXI.Assets.add({
     alias: "runeBlue",
-    src: "/art/runeBlue_slabOutline_035.png",
+    src: "art/runeBlue_slabOutline_035.png",
   });
   PIXI.Assets.add({
     alias: "runeGrey",
-    src: "/art/runeGrey_slabOutline_036.png",
+    src: "art/runeGrey_slabOutline_036.png",
   });
 
   const loadedAssets = await PIXI.Assets.load([
